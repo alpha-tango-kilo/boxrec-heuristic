@@ -11,8 +11,12 @@ impl Config {
         args.next();
 
         Ok(Config {
-            name_one: "Whee".to_string(),
-            name_two: "Wooo".to_string(),
+            name_one: args.next()
+                .ok_or("Missing boxers' names")?
+                .to_string(),
+            name_two: args.next()
+                .ok_or("Missing second boxer's name")?
+                .to_string(),
         })
     }
 }
