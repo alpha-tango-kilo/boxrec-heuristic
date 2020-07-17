@@ -31,11 +31,7 @@ pub fn generate_name_cache() -> Result<(), Box<dyn Error>> {
     let mut name_id_map: HashMap<String, u32> = HashMap::new();
     let mut success_count: u32 = 0; // temporary
     let mut failure_count: u32 = 0;
-    let selector = Selector::parse("h1").unwrap();
-    // TODO: allow for HTML special characters e.g. utf8-249023.htm
-    // TODO: Dashes too -> utf8-3274.htm
-    // Maybe just use slice and search for "BoxRec: "
-    let name_re = Regex::new(r"^\w+( \w+)+$").unwrap();
+    let selector = Selector::parse("title").unwrap();
     let id_no_re = Regex::new(r"[0-9]{3,}\.htm$").unwrap();
 
     let paths = fs::read_dir(DATA_DIR)?
@@ -100,16 +96,17 @@ pub fn generate_name_cache() -> Result<(), Box<dyn Error>> {
             .select(&selector)
             // Get what's contained in the h1 tags
             .map(|er| er.inner_html())
-            // Match the contents against the name regex (first result returned)
-            .find(|s| name_re.is_match(s))
+            // The correct tag is always in the form <title>
+            .find(|s| s.starts_with("BoxRec: "))
+            // TODO: Convert HTML escape sequences to characters
         { // Match the find Option result
             // If you get a name
             Some(name) => {
                 // Insert it into the HashMap against the ID
                 // Maybe check if something is returned, given this indicates a duplicate name
                 // If there are duplicates, don't store anything maybe?
-                name_id_map.insert(name,id);
-                success_count += 1;
+                name_id_map.insert(name[8..].to_string(),id);
+                success_count += 1; // temporary
             },
             // Print error if no name found in file, but carry on
             None => {
