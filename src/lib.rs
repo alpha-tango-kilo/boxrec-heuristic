@@ -120,12 +120,21 @@ pub fn generate_name_cache() -> Result<(), Box<dyn Error>> {
     println!("Success: {}\nFailure: {}", name_id_map.len(), failure_count);
 
     // Write name_id_map out to a CSV file in the same directory as the executable
-    //let mut writer = csv::Writer::from_path("./cache.csv")?;
-    //writer.write_record(name_id_map);
+    let mut writer = csv::Writer::from_path("./cache.csv")?;
+    name_id_map.iter()
+        .for_each(|(k, v)| {
+            if let Err(gah) = writer.write_record(&[k, &v.to_string()]) {
+                eprintln!("Failed to serialise {} => {}, skipping (Error: {})", k, v, gah);
+            }
+        });
     // CSV writers maintain an internal buffer, so it's important to flush when done
-    //writer.flush()?;
+    writer.flush()?;
 
     Ok(())
+}
+
+pub fn read_name_cache(path: &str) -> Result<HashMap<String, u32>, Box<dyn Error>> {
+
 }
 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
