@@ -134,11 +134,36 @@ pub fn generate_name_cache() -> Result<(), Box<dyn Error>> {
 }
 
 pub fn read_name_cache(path: &str) -> Result<HashMap<String, u32>, Box<dyn Error>> {
+    let mut reader = csv::Reader::from_path(path)?;
+    let mut name_id_map: HashMap<String, u32> = HashMap::new();
 
+    reader.records()
+        .for_each(|result| {
+            // Serialise and silently discard failures (borked)
+            /*result.and_then(|record: csv::StringRecord| {
+                record.deserialize(None)
+                    .and_then(|(name, id)| {
+                        name_id_map.insert(name, id);
+                    })
+            */
+            // Noisily discard failures
+            match result {
+                Ok(record) => {
+                    match record.deserialize(None) {
+                        Ok((name, id)) => { name_id_map.insert(name, id); },
+                        Err(err) => eprintln!("Failed to deserialise record (Error: {})", err),
+                    }
+                },
+                Err(err) => eprintln!("Failed to read record (Error: {})", err),
+            }
+        });
+    //println!("{:#?}", name_id_map);
+    Ok(name_id_map)
 }
 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
-    generate_name_cache()?;
+    //generate_name_cache()?;
+    read_name_cache("./cache.csv")?;
 
     Ok(())
 }
