@@ -3,31 +3,67 @@ use std::error::Error;
 use std::collections::HashMap;
 
 use scraper::{Html, Selector};
+use serde::Deserialize;
 use regex::Regex;
 
 const DATA_DIR: &str = "./data";
 
-pub struct Config {
+pub struct Args {
     pub name_one: String,
     pub name_two: String,
 }
 
-impl Config {
-    pub fn new(mut args: std::env::Args) -> Result<Config, Box<dyn Error>> {
+impl Args {
+    pub fn new(mut args: std::env::Args) -> Result<Args, Box<dyn Error>> {
         args.next();
 
-        Ok(Config {
+        Ok(Args {
             name_one: args.next()
-                .ok_or("Missing boxers' names")?
-                .to_string(),
+                .ok_or("Missing boxers' names")?,
             name_two: args.next()
-                .ok_or("Missing second boxer's name")?
-                .to_string(),
+                .ok_or("Missing second boxer's name")?,
         })
     }
 }
 
-pub fn generate_name_cache() -> Result<(), Box<dyn Error>> {
+#[derive(Deserialize)]
+struct Config {
+    cache_path: Option<String>,
+    weightings: Weightings,
+}
+
+impl Config {
+    fn new(path: &str) -> Config {
+        match fs::read_to_string(path) {
+            Ok(contents) => match toml::from_str(contents.as_str()) {
+                Ok(config) => config,
+                Err(err) => {
+                    eprintln!("Failed to parse config file, using default (Error: {})", err);
+                    Config::new_default()
+                }
+            },
+            Err(err) => {
+                eprintln!("Failed to read config file, using default (Error: {})", err);
+                Config::new_default()
+            },
+        }
+    }
+
+    fn new_default() -> Config {
+        // Cache by default
+        Config {
+            cache_path: Some("./cache.csv".to_string()),
+            weightings: Weightings {},
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct Weightings {
+    // TODO
+}
+
+pub fn generate_name_cache(cache_path_opt: &Option<String>) -> Result<HashMap<String, u32>, Box<dyn Error>> {
     let mut name_id_map: HashMap<String, u32> = HashMap::new();
     let mut success_count: u32 = 0; // temporary
     let mut failure_count: u32 = 0;
@@ -120,17 +156,20 @@ pub fn generate_name_cache() -> Result<(), Box<dyn Error>> {
     println!("Success: {}\nFailure: {}", name_id_map.len(), failure_count);
 
     // Write name_id_map out to a CSV file in the same directory as the executable
-    let mut writer = csv::Writer::from_path("./cache.csv")?;
-    name_id_map.iter()
-        .for_each(|(k, v)| {
-            if let Err(gah) = writer.write_record(&[k, &v.to_string()]) {
-                eprintln!("Failed to serialise {} => {}, skipping (Error: {})", k, v, gah);
-            }
-        });
-    // CSV writers maintain an internal buffer, so it's important to flush when done
-    writer.flush()?;
+    if let Some(cache_path) = cache_path_opt {
+        println!("Writing Name -> ID map to {}", cache_path);
+        let mut writer = csv::Writer::from_path(cache_path)?;
+        name_id_map.iter()
+            .for_each(|(k, v)| {
+                if let Err(gah) = writer.write_record(&[k, &v.to_string()]) {
+                    eprintln!("Failed to serialise {} => {}, skipping (Error: {})", k, v, gah);
+                }
+            });
+        // CSV writers maintain an internal buffer, so it's important to flush when done
+        writer.flush()?;
+    }
 
-    Ok(())
+    Ok(name_id_map)
 }
 
 pub fn read_name_cache(path: &str) -> Result<HashMap<String, u32>, Box<dyn Error>> {
@@ -161,9 +200,16 @@ pub fn read_name_cache(path: &str) -> Result<HashMap<String, u32>, Box<dyn Error
     Ok(name_id_map)
 }
 
-pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
-    //generate_name_cache()?;
-    read_name_cache("./cache.csv")?;
+pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
+    // TODO: make this changeable using a flag
+    let config = Config::new("./config.toml");
+
+    // If caching is enabled, do things here
+    if let Some(cache_path) = &config.cache_path {
+        //read_name_cache(&cache_path)?;
+    }
+
+    //generate_name_cache(&config.cache_path)?;
 
     Ok(())
 }

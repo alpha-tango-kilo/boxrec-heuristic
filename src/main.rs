@@ -1,9 +1,9 @@
 use std::process::exit;
 
-use boxrec_tool::Config;
+use boxrec_tool::Args;
 
 fn main() {
-    let config = Config::new(std::env::args()).unwrap_or_else(|err| {
+    let config = Args::new(std::env::args()).unwrap_or_else(|err| {
         eprintln!("Error parsing arguments: {}", err);
         exit(1);
     });
