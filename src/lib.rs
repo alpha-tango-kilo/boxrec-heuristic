@@ -29,7 +29,6 @@ impl Args {
 #[derive(Deserialize)]
 struct Config {
     cache_path: Option<String>,
-    weightings: Weightings,
 }
 
 impl Config {
@@ -51,16 +50,8 @@ impl Config {
 
     fn new_default() -> Config {
         // Cache by default
-        Config {
-            cache_path: Some("./cache.csv".to_string()),
-            weightings: Weightings {},
-        }
+        Config { cache_path: Some("./cache.csv".to_string()) }
     }
-}
-
-#[derive(Deserialize)]
-struct Weightings {
-    // TODO
 }
 
 pub fn generate_name_cache(cache_path_opt: &Option<String>) -> Result<HashMap<String, u32>, Box<dyn Error>> {
