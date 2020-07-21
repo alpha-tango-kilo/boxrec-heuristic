@@ -1,3 +1,5 @@
+#![allow(dead_code, unused_variables)]
+
 mod caching;
 mod boxer;
 
@@ -7,7 +9,11 @@ use boxer::*;
 use std::fs;
 use std::error::Error;
 
-use serde::Deserialize;
+use serde::{Serialize, Deserialize};
+use std::fs::File;
+use std::io::Write;
+
+const CONFIG_PATH: &str = "./config.yaml";
 
 pub struct Args {
     pub name_one: String,
@@ -27,7 +33,7 @@ impl Args {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Config {
     pub data_path: String,
     pub cache_path: Option<String>,
@@ -36,7 +42,7 @@ pub struct Config {
 impl Config {
     fn new(path: &str) -> Config {
         match fs::read_to_string(path) {
-            Ok(contents) => match toml::from_str(contents.as_str()) {
+            Ok(contents) => match serde_yaml::from_str(contents.as_str()) {
                 Ok(config) => config,
                 Err(err) => {
                     eprintln!("Failed to parse config file, using default (Error: {})", err);
@@ -56,11 +62,22 @@ impl Config {
             cache_path: Some("./cache.csv".to_string()), // Cache by default
         }
     }
+
+    fn save(self) -> Result<(), Box<dyn Error>> {
+        let se = serde_yaml::to_string(&self).unwrap();
+        match File::create(CONFIG_PATH)?.write_all(se.as_bytes()) {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                eprintln!("Failed to save config file (Error: {})", err);
+                Err(err.into())
+            },
+        }
+    }
 }
 
 pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
     // TODO: make this changeable using a flag
-    let config = Config::new("./config.toml");
+    let config = Config::new(CONFIG_PATH);
 
     // If caching is enabled, do things here
     if let Some(cache_path) = &config.cache_path {
@@ -69,5 +86,6 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
 
     generate_name_cache(&config)?;
 
+    config.save()?;
     Ok(())
 }
