@@ -1,17 +1,17 @@
 #![allow(dead_code, unused_variables)]
 
+use std::error::Error;
+use std::fs::{self, File};
+use std::io::Write;
+
+use serde::{Deserialize, Serialize};
+
+use boxer::*;
+use caching::*;
+
 mod caching;
 mod boxer;
-
-use caching::*;
-use boxer::*;
-
-use std::fs;
-use std::error::Error;
-
-use serde::{Serialize, Deserialize};
-use std::fs::File;
-use std::io::Write;
+mod boxrec;
 
 const CONFIG_PATH: &str = "./config.yaml";
 
@@ -37,6 +37,8 @@ impl Args {
 pub struct Config {
     pub data_path: String,
     pub cache_path: Option<String>,
+    pub username: String, // TODO: make Option<String>
+    pub password: String, // TODO: make Option<String>
 }
 
 impl Config {
@@ -57,9 +59,12 @@ impl Config {
     }
 
     fn new_default() -> Config {
+        // TODO: prompt for login details if not present
         Config {
             data_path: String::from("./data"),
             cache_path: Some("./cache.csv".to_string()), // Cache by default
+            username: String::from("foo"),
+            password: String::from("bar"),
         }
     }
 
@@ -79,13 +84,16 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
     // TODO: make this changeable using a flag
     let config = Config::new(CONFIG_PATH);
 
+    let client = boxrec::init()?;
+    boxrec::login(&config, &client)?;
+
     // If caching is enabled, do things here
     if let Some(cache_path) = &config.cache_path {
         //read_name_cache(&cache_path)?;
     }
 
-    generate_name_cache(&config)?;
+    //generate_name_cache(&config)?;
 
-    config.save()?;
+    //config.save()?;
     Ok(())
 }
