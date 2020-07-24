@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::error::Error;
-use std::io;
+use std::io::{self, Write};
 
 use reqwest::blocking::Client;
+use trim_in_place::TrimInPlace;
 
 use crate::Config;
 
@@ -38,8 +39,12 @@ impl Login {
     fn take_from_user(prompt: &str) -> Result<String, Box<dyn Error>> {
         let mut input = String::new();
         print!("{}", prompt);
+        // ensures the prompt is actually printed, as Rust usually only flushes on newline
+        io::stdout().flush()?;
         io::stdin()
             .read_line(&mut input)?;
+        // I actually had to get a crate for this...
+        input.trim_in_place();
         Ok(input)
     }
 }
@@ -69,10 +74,16 @@ pub fn login(config: &Config, client: &Client) -> Result<(), Box<dyn Error>> {
 
     let response = send.send()?;
 
-    println!("Response: {:#?}", response);
+    //println!("Response: {:#?}", response);
 
-    // Note the response code doesn't actually dictate if you were logged in successfully
-    // TODO: Identify if login was successful
+    // TODO: When reqwest supports it, check cookies set instead of making an extra request to check if login was successful
+    let req = client.get("https://boxrec.com/en/my_details").send()?;
+    //println!("Response: {:#?}", req);
 
-    Ok(())
+    if req.url().as_str().contains("login") {
+        Err("Failed to login".into())
+    } else {
+        println!("Logged in successfully");
+        Ok(())
+    }
 }
