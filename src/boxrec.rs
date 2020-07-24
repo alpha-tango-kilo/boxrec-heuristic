@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::io::{self, Write};
 
-use reqwest::blocking::Client;
+use reqwest::blocking::{Client, Response};
+use scraper::Html;
 use trim_in_place::TrimInPlace;
 
 use crate::Config;
@@ -80,10 +81,25 @@ pub fn login(config: &Config, client: &Client) -> Result<(), Box<dyn Error>> {
     let req = client.get("https://boxrec.com/en/my_details").send()?;
     //println!("Response: {:#?}", req);
 
-    if req.url().as_str().contains("login") {
+    if am_beaned(&req) {
         Err("Failed to login".into())
     } else {
         println!("Logged in successfully");
         Ok(())
     }
+}
+
+fn am_beaned(response: &Response) -> bool {
+    response.url().as_str().contains("login")
+}
+
+pub fn get_page_by_id(client: &Client, id: u32) -> Result<Html, Box<dyn Error>> {
+    let url = format!("https://boxrec.com/en/proboxer/{}", id);
+    let req = client.get(&url).send()?;
+    if am_beaned(&req) {
+        return Err("Logged out by BoxRec".into());
+    }
+    let req_text = req.text()?;
+    //println!("{}", req_text);
+    Ok(Html::parse_document(req_text.as_str()))
 }
