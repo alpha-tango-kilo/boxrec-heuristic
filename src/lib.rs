@@ -37,8 +37,8 @@ impl Args {
 pub struct Config {
     pub data_path: String,
     pub cache_path: Option<String>,
-    pub username: String, // TODO: make Option<String>
-    pub password: String, // TODO: make Option<String>
+    pub username: Option<String>,
+    pub password: Option<String>,
 }
 
 impl Config {
@@ -59,12 +59,11 @@ impl Config {
     }
 
     fn new_default() -> Config {
-        // TODO: prompt for login details if not present
         Config {
             data_path: String::from("./data"),
             cache_path: Some("./cache.csv".to_string()), // Cache by default
-            username: String::from("foo"),
-            password: String::from("bar"),
+            username: None,
+            password: None,
         }
     }
 
