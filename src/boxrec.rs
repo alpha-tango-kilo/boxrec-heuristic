@@ -186,3 +186,34 @@ pub fn boxer_search(client: &Client, forename: &str, surname: &str, active_only:
     println!("Selected: {}", boxer_id);
     Ok(boxer_id)
 }
+
+pub fn get_boxer_page(client: &Client, id: &u32) -> Result<Html, Box<dyn Error>> {
+    let url = format!("https://boxrec.com/en/proboxer/{}", id);
+    let response = client.get(&url).send()?;
+    let content = response.text()?;
+    Ok(Html::parse_document(content.as_str()))
+}
+
+pub fn find_bout(client: &Client, id_1: &u32, name_2: &str) -> Result<Html, Box<dyn Error>> {
+    let boxer_1 = get_boxer_page(client, id_1)?;
+    let name_selector = Selector::parse("a.personLink").unwrap();
+    let bout_link_selector = Selector::parse(".boutP").unwrap();
+
+    let names = boxer_1.select(&name_selector)
+        .map(|er| er.inner_html());
+    let bout_links = boxer_1.select(&bout_link_selector)
+        .map(|er| {
+            let foo = er.parent()
+                .unwrap() // bad idea
+                .value()
+                .as_text()
+                .unwrap(); // bad idea again
+            println!("{:?}", foo);
+            foo
+        });
+
+    for bout in names.zip(bout_links) {
+
+    }
+    Ok(Html::new_document())
+}
