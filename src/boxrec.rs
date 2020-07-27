@@ -191,29 +191,38 @@ pub fn get_boxer_page(client: &Client, id: &u32) -> Result<Html, Box<dyn Error>>
     let url = format!("https://boxrec.com/en/proboxer/{}", id);
     let response = client.get(&url).send()?;
     let content = response.text()?;
-    Ok(Html::parse_document(content.as_str()))
+    Ok(Html::parse_document(&content))
 }
 
-pub fn find_bout(client: &Client, id_1: &u32, name_2: &str) -> Result<Html, Box<dyn Error>> {
+// TODO: maybe make args a bit more user friendly
+pub fn find_upcoming_bout(client: &Client, id_1: &u32, name_2: &str) -> Result<Html, Box<dyn Error>> {
     let boxer_1 = get_boxer_page(client, id_1)?;
-    let name_selector = Selector::parse("a.personLink").unwrap();
-    let bout_link_selector = Selector::parse(".boutP").unwrap();
+    let name_2 = name_2.to_lowercase();
+    let scheduled_bouts_selector = Selector::parse(".scheduleRow").unwrap();
 
-    let names = boxer_1.select(&name_selector)
-        .map(|er| er.inner_html());
-    let bout_links = boxer_1.select(&bout_link_selector)
-        .map(|er| {
-            let foo = er.parent()
-                .unwrap() // bad idea
-                .value()
-                .as_text()
-                .unwrap(); // bad idea again
-            println!("{:?}", foo);
-            foo
-        });
+    let mut scheduled_fights = boxer_1.select(&scheduled_bouts_selector).peekable();
 
-    for bout in names.zip(bout_links) {
-
+    if scheduled_fights.peek().is_none() {
+        return Err(format!("Boxer {} has no scheduled fights", id_1).into()); // TODO: return name instead
     }
-    Ok(Html::new_document())
+
+    let bout_link_regex = Regex::new(r"/en/event/[0-9]{6,}/[0-9]{7,}").unwrap();
+
+    for upcoming_fight in scheduled_fights {
+        let upcoming_fight = upcoming_fight.html();
+        // Check if a URL is found first, this isn't guaranteed
+        match bout_link_regex.find(&upcoming_fight) {
+            // If a URL is found, check that this entry is for the correct opponent
+            Some(link) => if upcoming_fight.to_lowercase().contains(&name_2) {
+                println!("Found matching bout");
+                // Once a matching bout has been found, download the page
+                let url = format!("https://boxrec.com{}", link.as_str());
+                let bout_page = client.get(&url).send()?.text()?;
+                return Ok(Html::parse_document(&bout_page));
+            },
+            None => {},
+        }
+    }
+    // If nothing is found after going through all the scheduled entries, say we couldn't find any
+    Err("Unable to find any bouts matching search criteria".into())
 }
