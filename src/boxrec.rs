@@ -226,3 +226,21 @@ pub fn find_upcoming_bout(client: &Client, id_1: &u32, name_2: &str) -> Result<H
     // If nothing is found after going through all the scheduled entries, say we couldn't find any
     Err("Unable to find any bouts matching search criteria".into())
 }
+
+pub fn get_scores(client: &Client, bout_page: &Html) -> Result<(f32, f32), Box<dyn Error>> {
+    let table_row_selector = Selector::parse(".responseLessDataTable").unwrap();
+    let float_regex = Regex::new(r"[0-9]+\.[0-9]+").unwrap();
+
+    for row in bout_page.select(&table_row_selector) {
+        let raw_html = row.html();
+        if raw_html.contains("after fight") {
+            let scores = float_regex.find_iter(&raw_html).collect::<Vec<_>>();
+            if scores.len() != 2 {
+                // Something spooky
+            } else {
+                // Parse numbers
+            }
+        }
+    }
+    Err("Couldn't find scores on bout page".into())
+}

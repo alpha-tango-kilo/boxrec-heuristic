@@ -87,7 +87,9 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
     boxrec::login(&config, &client)?;
     //boxrec::get_page_by_id(&client, 629465)?;
     //boxrec::boxer_search(&client, "Floyd", "Mark", false)?;
-    boxrec::find_upcoming_bout(&client, &725959, "Sam Eggington")?;
+    let bout_page = boxrec::find_upcoming_bout(&client, &725959, "Sam Eggington")?;
+    let scores = boxrec::get_scores(&client, &bout_page)?;
+    println!("{:?}", scores);
 
     // If caching is enabled, do things here
     if let Some(cache_path) = &config.cache_path {
