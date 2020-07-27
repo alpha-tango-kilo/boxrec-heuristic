@@ -234,12 +234,26 @@ pub fn get_scores(client: &Client, bout_page: &Html) -> Result<(f32, f32), Box<d
     for row in bout_page.select(&table_row_selector) {
         let raw_html = row.html();
         if raw_html.contains("after fight") {
-            let scores = float_regex.find_iter(&raw_html).collect::<Vec<_>>();
-            if scores.len() != 2 {
-                // Something spooky
+            let scores = float_regex.find_iter(&raw_html)
+                .filter_map(|m| -> Option<f32> {
+                    // Take the snip identified by the regex
+                    raw_html[m.start()..m.end()]
+                        // Parse it as a float
+                        .parse::<f32>()
+                        // And convert it to an option so the filter_map drops all the bad ones
+                        .ok()
+                })
+                // Aggressively shove this into a vector
+                .collect::<Vec<_>>();
+            return if scores.len() != 2 {
+                // What the fonk did the regex match?!
+                Err(format!("Didn't find two scores, confused. (Found: {:?})", scores).into())
             } else {
-                // Parse numbers
-            }
+                Ok((
+                    *scores.get(0).unwrap(),
+                    *scores.get(1).unwrap(),
+                ))
+            };
         }
     }
     Err("Couldn't find scores on bout page".into())
