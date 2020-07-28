@@ -11,9 +11,25 @@ pub struct Boxer {
 }
 
 impl Boxer {
-    pub fn get_by_name(api: &BoxRecAPI, name: &String) -> Option<Boxer> {
-        // TODO
-        None
+    pub fn get_by_name(api: &BoxRecAPI, name: String) -> Option<Boxer> {
+        let (forename, surname) = match split_name(&name) {
+            Ok(tup) => tup,
+            Err(err) => {
+                eprintln!("{}", err);
+                return None;
+            },
+        };
+        match api.boxer_search(&forename, &surname, false) {
+            Ok(id) => Some(Boxer {
+                id,
+                forename,
+                surname,
+            }),
+            Err(err) => {
+                eprintln!("Failed to get boxer \"{}\" (Error: {})", name, err);
+                None
+            },
+        }
     }
 
     pub fn get_by_id(api: &BoxRecAPI, id: u32) -> Option<Boxer> {
