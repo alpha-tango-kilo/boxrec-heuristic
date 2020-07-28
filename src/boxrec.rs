@@ -90,7 +90,7 @@ impl BoxRecAPI {
         }
     }
 
-    pub fn get_page_by_id(&self, id: u32) -> Result<Html, Box<dyn Error>> {
+    pub fn get_boxer_page_by_id(&self, id: &u32) -> Result<Html, Box<dyn Error>> {
         let url = format!("https://boxrec.com/en/proboxer/{}", id);
         let req = self.reqwest_client.get(&url).send()?;
         logged_out(&req)?;
@@ -175,18 +175,9 @@ impl BoxRecAPI {
         Ok(boxer_id)
     }
 
-    pub fn get_boxer_page(&self, id: &u32) -> Result<Html, Box<dyn Error>> {
-        let url = format!("https://boxrec.com/en/proboxer/{}", id);
-        let response = self.reqwest_client.get(&url).send()?;
-        logged_out(&response)?;
-        Ok(Html::parse_document(
-            response.text()?.as_str())
-        )
-    }
-
     // TODO: maybe make args a bit more user friendly
     pub fn get_bout_odds(&self, id_1: &u32, name_2: &str) -> Result<(f32, f32), Box<dyn Error>> {
-        let boxer_1 = self.get_boxer_page(id_1)?;
+        let boxer_1 = self.get_boxer_page_by_id(id_1)?;
         let name_2 = name_2.to_lowercase();
         let scheduled_bouts_selector = Selector::parse(".scheduleRow").unwrap();
 
