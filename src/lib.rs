@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use boxer::*;
 use caching::*;
 
+use crate::boxrec::BoxRecAPI;
+
 mod caching;
 mod boxer;
 mod boxrec;
@@ -83,13 +85,12 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
     // TODO: make this changeable using a flag
     let config = Config::new(CONFIG_PATH);
 
-    let client = boxrec::init()?;
-    boxrec::login(&config, &client)?;
-    //boxrec::get_page_by_id(&client, 629465)?;
-    //boxrec::boxer_search(&client, "Floyd", "Mark", false)?;
-    let bout_page = boxrec::find_upcoming_bout(&client, &626585, "ted cheeseman")?;
-    let scores = boxrec::get_scores(&client, &bout_page)?;
-    println!("{:?}", scores);
+    let client = BoxRecAPI::init()?;
+    client.login(&config)?;
+    //client.get_page_by_id(&client, 629465)?;
+    //client.boxer_search(&client, "Floyd", "Mark", false)?;
+    let bout_odds = client.get_bout_odds(&626585, "ted cheeseman")?;
+    println!("{:?}", bout_odds);
 
     // If caching is enabled, do things here
     if let Some(cache_path) = &config.cache_path {
