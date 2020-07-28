@@ -10,9 +10,10 @@ use boxer::*;
 
 use crate::boxrec::BoxRecAPI;
 
-mod caching;
+mod betfair;
 mod boxer;
 mod boxrec;
+mod caching;
 
 const CONFIG_PATH: &str = "./config.yaml";
 
