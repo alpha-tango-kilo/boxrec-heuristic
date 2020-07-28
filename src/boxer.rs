@@ -5,8 +5,8 @@ use crate::boxrec::BoxRecAPI;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Boxer {
-    pub id: u32,
-    pub name: String,
+    id: u32,
+    name: String,
 }
 
 impl Boxer {
@@ -47,4 +47,9 @@ impl Boxer {
             },
         }
     }
+
+    pub fn get_name(&self) -> &String { &self.name }
+
+    pub fn get_id(&self) -> &u32 { &self.id }
+
 }
