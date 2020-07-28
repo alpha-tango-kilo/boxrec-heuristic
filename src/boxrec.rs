@@ -69,20 +69,14 @@ pub fn login(config: &Config, client: &Client) -> Result<(), Box<dyn Error>> {
 
     println!("Sending login request");
 
-    let send = client.post("https://boxrec.com/en/login")
-        .form(&form_data);
+    let final_url = client.post("https://boxrec.com/en/login")
+        .form(&form_data)
+        .send()?
+        .url()
+        .as_str();
 
-    //println!("Request: {:#?}", send);
-
-    let response = send.send()?;
-
-    //println!("Response: {:#?}", response);
-
-    // TODO: When reqwest supports it, check cookies set instead of making an extra request to check if login was successful
-    let req = client.get("https://boxrec.com/en/my_details").send()?;
-    //println!("Response: {:#?}", req);
-
-    if am_beaned(&req) {
+    // If login is successful, you are redirected to the home page instead of the login page
+    if final_url == "https://boxrec.com/en/login" {
         Err("Failed to login".into())
     } else {
         println!("Logged in successfully");
