@@ -6,7 +6,8 @@ use crate::boxrec::BoxRecAPI;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Boxer {
     id: u32,
-    name: String,
+    forename: String,
+    surname: String,
 }
 
 impl Boxer {
@@ -35,10 +36,11 @@ impl Boxer {
             .find(|s| s.starts_with("BoxRec: "))
         { // Match the find Option result
             Some(name) => {
-                let name = String::from(&name[8..]);
+                let (forename, surname) = split_name(&name[8..]).unwrap();
                 Some(Boxer {
                     id,
-                    name,
+                    forename,
+                    surname,
                 })
             },
             None => {
@@ -48,8 +50,18 @@ impl Boxer {
         }
     }
 
-    pub fn get_name(&self) -> &String { &self.name }
+    pub fn get_name(&self) -> String { format!("{} {}", self.forename, self.surname) }
 
     pub fn get_id(&self) -> &u32 { &self.id }
+}
 
+fn split_name(name: &str) -> Result<(String, String), &'static str> {
+    // Takes first word as forename and the rest as surname
+    match name.find(" ") {
+        Some(index) => Ok((
+            String::from(&name[..index]),
+            String::from(&name[index..]),
+        )),
+        None => Err("Malformed name: no spaces")
+    }
 }
