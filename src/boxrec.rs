@@ -56,11 +56,11 @@ pub struct BoxRecAPI {
 }
 
 impl BoxRecAPI {
-    pub fn init() -> Result<BoxRecAPI, reqwest::Error> {
+    pub fn new() -> Result<BoxRecAPI, reqwest::Error> {
         // Basic synchronous client with cookies enabled
         Ok(BoxRecAPI {
             reqwest_client:
-                reqwest::blocking::Client::builder()
+                Client::builder()
                     .cookie_store(true)
                     .build()?,
         })
@@ -107,15 +107,15 @@ impl BoxRecAPI {
             surname,
             if active_only { "a" } else { "" }
         );
-        let req = self.reqwest_client.get(&url).send()?;
+        let response = self.reqwest_client.get(&url).send()?;
 
-        logged_out(&req)?;
+        logged_out(&response)?;
 
         // Step 2: parse results
-        let req = req.text()?;
-        let req = Html::parse_document(req.as_str());
+        let response = response.text()?;
+        let response = Html::parse_document(&response);
         let selector = Selector::parse("a.personLink").unwrap();
-        let mut results = req.select(&selector).peekable();
+        let mut results = response.select(&selector).peekable();
         let re = Regex::new(r"[0-9]{3,}").unwrap();
 
         let target;
@@ -176,7 +176,7 @@ impl BoxRecAPI {
     }
 
     // TODO: maybe make args a bit more user friendly
-    pub fn get_bout_odds(&self, id_1: &u32, name_2: &str) -> Result<(f32, f32), Box<dyn Error>> {
+    pub fn get_bout_page(&self, id_1: &u32, name_2: &str) -> Result<Html, Box<dyn Error>> {
         let boxer_1 = self.get_boxer_page_by_id(id_1)?;
         let name_2 = name_2.to_lowercase();
         let scheduled_bouts_selector = Selector::parse(".scheduleRow").unwrap();
@@ -200,7 +200,7 @@ impl BoxRecAPI {
                     let url = format!("https://boxrec.com{}", link.as_str());
                     let bout_page = self.reqwest_client.get(&url).send()?.text()?;
                     // Pass onto the next stage
-                    return get_scores(&Html::parse_document(&bout_page));
+                    return Ok(Html::parse_document(&bout_page));
                 },
                 None => {},
             }
@@ -216,36 +216,4 @@ fn logged_out(response: &Response) -> Result<(), &'static str> {
     } else {
         Ok(())
     }
-}
-
-fn get_scores(bout_page: &Html) -> Result<(f32, f32), Box<dyn Error>> {
-    let table_row_selector = Selector::parse(".responseLessDataTable").unwrap();
-    let float_regex = Regex::new(r"[0-9]+\.[0-9]+").unwrap();
-
-    for row in bout_page.select(&table_row_selector) {
-        let raw_html = row.html();
-        if raw_html.contains("after fight") {
-            let scores = float_regex.find_iter(&raw_html)
-                .filter_map(|m| -> Option<f32> {
-                    // Take the snip identified by the regex
-                    raw_html[m.start()..m.end()]
-                        // Parse it as a float
-                        .parse::<f32>()
-                        // And convert it to an option so the filter_map drops all the bad ones
-                        .ok()
-                })
-                // Aggressively shove this into a vector
-                .collect::<Vec<_>>();
-            return if scores.len() != 2 {
-                // What the fonk did the regex match?!
-                Err(format!("Didn't find two scores, confused. (Found: {:?})", scores).into())
-            } else {
-                Ok((
-                    *scores.get(0).unwrap(),
-                    *scores.get(1).unwrap(),
-                ))
-            };
-        }
-    }
-    Err("Couldn't find scores on bout page".into())
 }

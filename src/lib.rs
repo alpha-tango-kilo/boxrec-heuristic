@@ -84,10 +84,10 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
     // TODO: make this changeable using a flag
     let config = Config::new(CONFIG_PATH);
 
-    let client = BoxRecAPI::init()?;
+    let client = BoxRecAPI::new()?;
     client.login(&config)?;
 
-    match Boxer::get_by_id(&client, 314868) {
+    match Boxer::new_by_id(&client, 314868) {
         Some(b) => println!("It worked! {:?}", b),
         None => println!("It didn't work :("),
     };
