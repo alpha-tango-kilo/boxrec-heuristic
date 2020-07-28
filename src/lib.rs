@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use boxer::*;
 
+use crate::betfair::BetfairAPI;
 use crate::boxrec::BoxRecAPI;
 
 mod betfair;
@@ -85,13 +86,17 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
     // TODO: make this changeable using a flag
     let config = Config::new(CONFIG_PATH);
 
-    let client = BoxRecAPI::new()?;
-    client.login(&config)?;
+    //let client = BoxRecAPI::new()?;
+    //client.login(&config)?;
 
-    match Boxer::new_by_id(&client, 314868) {
+    let betfair = BetfairAPI::new()?;
+    let bouts = betfair.get_listed_bouts()?;
+    println!("{:#?}", bouts);
+
+    /*match Boxer::new_by_id(&client, 314868) {
         Some(b) => println!("It worked! {:?}", b),
         None => println!("It didn't work :("),
-    };
+    };*/
 
     // API stuffs
     //client.get_page_by_id(&client, 629465)?;
