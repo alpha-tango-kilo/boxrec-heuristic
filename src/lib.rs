@@ -86,10 +86,17 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
 
     let client = BoxRecAPI::init()?;
     client.login(&config)?;
+
+    match Boxer::get_by_id(&client, 314868) {
+        Some(b) => println!("It worked! {:?}", b),
+        None => println!("It didn't work :("),
+    };
+
+    // API stuffs
     //client.get_page_by_id(&client, 629465)?;
     //client.boxer_search(&client, "Floyd", "Mark", false)?;
-    let bout_odds = client.get_bout_odds(&626585, "ted cheeseman")?;
-    println!("{:?}", bout_odds);
+    //let bout_odds = client.get_bout_odds(&626585, "ted cheeseman")?;
+    //println!("{:?}", bout_odds);
 
     // If caching is enabled, do things here
     if let Some(cache_path) = &config.cache_path {
