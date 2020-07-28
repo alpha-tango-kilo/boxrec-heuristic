@@ -84,21 +84,19 @@ pub fn login(config: &Config, client: &Client) -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn am_beaned(response: &Response) -> bool {
-    response.url().as_str().contains("login")
+fn logged_out(response: &Response) -> Result<(), &'static str> {
+    if response.url().as_str().contains("login") {
+        Err("Logged out by BoxRec")
+    } else {
+        Ok(())
+    }
 }
 
 pub fn get_page_by_id(client: &Client, id: u32) -> Result<Html, Box<dyn Error>> {
     let url = format!("https://boxrec.com/en/proboxer/{}", id);
     let req = client.get(&url).send()?;
-
-    if am_beaned(&req) {
-        Err("Logged out by BoxRec".into())
-    } else {
-        let req_text = req.text()?;
-        //println!("{}", req_text);
-        Ok(Html::parse_document(req_text.as_str()))
-    }
+    logged_out(&req)?;
+    Ok(Html::parse_document(req.text()?.as_str()))
 }
 
 pub fn boxer_search(client: &Client, forename: &str, surname: &str, active_only: bool) -> Result<u32, Box<dyn Error>> {
@@ -113,9 +111,7 @@ pub fn boxer_search(client: &Client, forename: &str, surname: &str, active_only:
     );
     let req = client.get(&url).send()?;
 
-    if am_beaned(&req) {
-        return Err("Logged out by BoxRec".into());
-    }
+    logged_out(&req)?;
 
     // Step 2: parse results
     let req = req.text()?;
@@ -184,8 +180,10 @@ pub fn boxer_search(client: &Client, forename: &str, surname: &str, active_only:
 pub fn get_boxer_page(client: &Client, id: &u32) -> Result<Html, Box<dyn Error>> {
     let url = format!("https://boxrec.com/en/proboxer/{}", id);
     let response = client.get(&url).send()?;
-    let content = response.text()?;
-    Ok(Html::parse_document(&content))
+    logged_out(&response)?;
+    Ok(Html::parse_document(
+        response.text()?.as_str())
+    )
 }
 
 // TODO: maybe make args a bit more user friendly
