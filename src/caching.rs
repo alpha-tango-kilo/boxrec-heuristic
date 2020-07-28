@@ -1,11 +1,12 @@
-use super::Config;
-
-use std::fs;
-use std::error::Error;
 use std::collections::HashMap;
+use std::error::Error;
+use std::fs;
 
-use scraper::{Html, Selector};
 use regex::Regex;
+use scraper::{Html, Selector};
+
+#[deprecated]
+use super::Config;
 
 pub fn generate_name_cache(config: &Config) -> Result<HashMap<String, u32>, Box<dyn Error>> {
     let mut name_id_map: HashMap<String, u32> = HashMap::new();

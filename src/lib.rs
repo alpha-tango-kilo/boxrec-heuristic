@@ -7,7 +7,6 @@ use std::io::Write;
 use serde::{Deserialize, Serialize};
 
 use boxer::*;
-use caching::*;
 
 use crate::boxrec::BoxRecAPI;
 
