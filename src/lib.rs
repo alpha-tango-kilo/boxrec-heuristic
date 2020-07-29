@@ -14,7 +14,6 @@ use crate::boxrec::BoxRecAPI;
 mod betfair;
 mod boxer;
 mod boxrec;
-mod caching;
 
 const CONFIG_PATH: &str = "./config.yaml";
 const NOTIFY_THRESHOLD: f32 = 25f32; // TODO: Add to config file
@@ -140,10 +139,8 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
 
     // If caching is enabled, do things here
     if let Some(cache_path) = &config.cache_path {
-        //read_name_cache(&cache_path)?;
-    }
 
-    //generate_name_cache(&config)?;
+    }
 
     //config.save()?;
     Ok(())
