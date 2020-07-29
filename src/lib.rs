@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use boxer::*;
 
-use crate::betfair::BetfairAPI;
+use crate::betfair::{BetfairAPI, Bout};
 use crate::boxrec::BoxRecAPI;
 
 mod betfair;
@@ -17,6 +17,7 @@ mod boxrec;
 mod caching;
 
 const CONFIG_PATH: &str = "./config.yaml";
+const NOTIFY_THRESHOLD: f32 = 25f32; // TODO: Add to config file
 
 pub struct Args {
     pub name_one: String,
@@ -80,6 +81,39 @@ impl Config {
             },
         }
     }
+}
+
+fn compare_and_notify(matchup: &Matchup, bout: &Bout, threshold: &f32) {
+    if matchup.win_percent_one - bout.odds.one_wins.as_percent() > *threshold {
+        pretty_print_notification(
+            &matchup.fighter_one.get_name(),
+            &matchup.win_percent_one,
+            &matchup.fighter_two.get_name(),
+            &bout.odds.one_wins.as_frac(),
+            &matchup.warning,
+        );
+    } else if matchup.win_percent_two - bout.odds.two_wins.as_percent() > *threshold {
+        pretty_print_notification(
+            &matchup.fighter_two.get_name(),
+            &matchup.win_percent_two,
+            &matchup.fighter_one.get_name(),
+            &bout.odds.two_wins.as_frac(),
+            &matchup.warning,
+        );
+    }
+}
+
+fn pretty_print_notification(winner_to_be: &str, win_percent: &f32, loser_to_be: &str, odds: &str, warning: &bool) {
+    println!("---\
+        {}We might be onto something chief!\
+        BoxRec shows {} as having a {}% chance of winning against {}, and yet the betting odds are {}\
+        ---",
+             if *warning { "[WARNING: both boxer's have a BoxRec score below the safe threshold]\n" } else { "" },
+             winner_to_be,
+             win_percent,
+             loser_to_be,
+             odds
+    );
 }
 
 pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
