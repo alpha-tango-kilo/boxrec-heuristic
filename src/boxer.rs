@@ -6,6 +6,30 @@ use serde::{Deserialize, Serialize};
 
 use crate::boxrec::BoxRecAPI;
 
+// If both boxers in a matchup have a score below this, a warning will be added
+const SCORE_WARNING: f32 = 2f32;
+
+pub struct Matchup<'a> {
+    pub fighter_one: &'a Boxer,
+    pub fighter_two: &'a Boxer,
+    pub win_percent_one: f32,
+    pub win_percent_two: f32,
+    pub warning: bool,
+}
+
+impl<'a> Matchup<'a> {
+    fn new(fighter_one: &'a Boxer, fighter_one_score: f32, fighter_two: &'a Boxer, fighter_two_score: f32) -> Matchup<'a> {
+        let win_percent_one = fighter_one_score / fighter_one_score * 100f32;
+        Matchup {
+            fighter_one,
+            fighter_two,
+            win_percent_one,
+            win_percent_two: 100f32 - win_percent_one,
+            warning: fighter_one_score + fighter_two_score < 2f32 * SCORE_WARNING,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Boxer {
     id: u32,
@@ -73,7 +97,7 @@ impl Boxer {
 
     pub fn get_id(&self) -> &u32 { &self.id }
 
-    pub fn get_bout_scores(&self, api: &BoxRecAPI, opponent: &Boxer) -> Result<(f32, f32), Box<dyn Error>> {
+    pub fn get_bout_scores<'a>(&'a self, api: &BoxRecAPI, opponent: &'a Boxer) -> Result<Matchup<'a>, Box<dyn Error>> {
         let bout_page = api.get_bout_page(&self.id, &opponent.get_name())?;
         let table_row_selector = Selector::parse(".responseLessDataTable").unwrap();
         let float_regex = Regex::new(r"[0-9]+\.[0-9]+").unwrap();
@@ -81,7 +105,7 @@ impl Boxer {
         for row in bout_page.select(&table_row_selector) {
             let raw_html = row.html();
             if raw_html.contains("after fight") {
-                let scores = float_regex.find_iter(&raw_html)
+                let mut scores = float_regex.find_iter(&raw_html)
                     .filter_map(|m| -> Option<f32> {
                         // Take the snip identified by the regex
                         raw_html[m.start()..m.end()]
@@ -89,18 +113,13 @@ impl Boxer {
                             .parse::<f32>()
                             // And convert it to an option so the filter_map drops all the bad ones
                             .ok()
-                    })
-                    // Aggressively shove this into a vector
-                    .collect::<Vec<_>>();
-                return if scores.len() != 2 {
-                    // What the fonk did the regex match?!
-                    Err(format!("Didn't find two scores, confused. (Found: {:?})", scores).into())
-                } else {
-                    Ok((
-                        *scores.get(0).unwrap(),
-                        *scores.get(1).unwrap(),
-                    ))
-                };
+                    });
+                return Ok(Matchup::new(
+                    self,
+                    scores.next().ok_or("Couldn't find first fighter's score")?,
+                    opponent,
+                    scores.next().ok_or("Couldn't find second fighter's score")?,
+                ));
             }
         }
         Err("Couldn't find scores on bout page".into())
