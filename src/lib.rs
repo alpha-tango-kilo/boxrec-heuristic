@@ -19,8 +19,8 @@ const CONFIG_PATH: &str = "./config.yaml";
 const NOTIFY_THRESHOLD: f32 = 25f32; // TODO: Add to config file
 
 pub struct Args {
-    pub name_one: String,
-    pub name_two: String,
+    name_one: String,
+    name_two: String,
 }
 
 impl Args {
