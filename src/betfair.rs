@@ -12,7 +12,6 @@ pub struct Bout {
 
 #[derive(Debug)]
 pub struct BoutOdds {
-    // All are percentages
     pub one_wins: Odds,
     pub draw: Odds,
     pub two_wins: Odds,
@@ -24,8 +23,9 @@ pub struct Odds {
     bottom: u32,
 }
 
+// https://www.aceodds.com/bet-calculator/odds-converter.html
 impl Odds {
-    fn from_string(s: String) -> Result<Odds, Box<dyn Error>> {
+    fn from_mangled_string(s: String) -> Result<Odds, Box<dyn Error>> {
         // Warning: copious jank
         // The only way to solve this would be to match the exact <span> element that holds the fraction
         // But its CSS is no different to the parent <a> element, so I end up getting the whole <span> element instead of the inner HTML of it, which would be just the fraction
@@ -57,12 +57,19 @@ impl Odds {
         })
     }
 
+    // Used to quote profit
     pub fn as_frac(&self) -> String {
         format!("{}/{}", self.top, self.bottom)
     }
 
+    // Used to show bookie's perceived odds
     pub fn as_percent(&self) -> f32 {
         100f32 * (1f32 - self.top as f32 / self.bottom as f32)
+    }
+
+    // Used to calculate return (profit + stake)
+    pub fn as_decimal(&self) -> f32 {
+        1f32 + self.top as f32 / self.bottom as f32
     }
 }
 
@@ -136,7 +143,7 @@ fn get_bout_odds(fragment: &ElementRef) -> Result<BoutOdds, Box<dyn Error>> {
     let mut raw_fracs = fragment.select(&odds_button_selector)
         .map(|er| { er.inner_html() })
         //.map(|s| { println!("{}", s); s })
-        .map(Odds::from_string);
+        .map(Odds::from_mangled_string);
 
     Ok(BoutOdds {
         one_wins: raw_fracs.next().unwrap()?,
