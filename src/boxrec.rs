@@ -134,38 +134,49 @@ impl BoxRecAPI {
             target = re.find(search_in.as_str()).unwrap().as_str();
         } else {
             // No exact match, list results and have user pick
-            println!("Exact match not found. Please choose your fighter");
-            choices = results.enumerate()
-                .map(|(n, er)| -> String {
-                    println!("{}) {}", n + 1, er.inner_html());
-                    er.html()
-                })
+            println!("Exact match not found for '{} {}'. Please choose your fighter",
+                forename,
+                surname);
+            // Grab the name (inner_html) and the whole page
+            choices = results.map(|er| (er.inner_html(), er.html()))
                 .collect::<Vec<_>>();
-            // Handle user input
             let choice: usize;
-            loop {
-                print!("Pick a number: ");
-                io::stdout().flush()?;
-                let mut temp = String::new();
-                io::stdin()
-                    .read_line(&mut temp)?;
-                match temp.trim().parse::<usize>() {
-                    Ok(n) => {
-                        if n > 0 && n < choices.len() {
-                            // Account for offset
-                            choice = n - 1;
-                            break;
-                        } else {
-                            println!("Please pick a valid number");
-                        }
-                    },
-                    Err(_) => println!("No, actually pick a number"),
+            if choices.len() > 1 {
+                // If there are multiple options, pretty print them and have the user choose
+                choices.iter()
+                    .enumerate()
+                    .for_each(|(n, (name, _))| {
+                        println!("{}) {}", n + 1, name)
+                    });
+                // Handle user input
+                loop {
+                    print!("Pick a number: ");
+                    io::stdout().flush()?;
+                    let mut temp = String::new();
+                    io::stdin()
+                        .read_line(&mut temp)?;
+                    match temp.trim().parse::<usize>() {
+                        Ok(n) => {
+                            if n > 0 && n <= choices.len() {
+                                // Account for offset
+                                choice = n - 1;
+                                break;
+                            } else {
+                                println!("Please pick a valid number");
+                            }
+                        },
+                        Err(_) => println!("No, actually pick a number"),
+                    }
                 }
+            } else {
+                // If there's only one choice, pick the first item
+                choice = 0;
             }
             // End user input
             // Find ID of boxer using regex search
             target = re.find(
-                choices.get(choice).unwrap()
+                // Tuple index 1 to search the page contents
+                &choices.get(choice).unwrap().1
             ).unwrap()
                 .as_str();
         }
