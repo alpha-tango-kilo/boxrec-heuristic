@@ -38,7 +38,7 @@ pub struct Boxer {
 }
 
 impl Boxer {
-    pub fn new_by_name(api: &BoxRecAPI, name: String) -> Option<Boxer> {
+    pub fn new_by_name(api: &BoxRecAPI, name: &str) -> Option<Boxer> {
         let (forename, surname) = match split_name(&name) {
             Ok(tup) => tup,
             Err(err) => {
@@ -130,8 +130,8 @@ fn split_name(name: &str) -> Result<(String, String), &'static str> {
     // Takes first word as forename and the rest as surname
     match name.find(" ") {
         Some(index) => Ok((
-            String::from(&name[..index]),
-            String::from(&name[index..]),
+            String::from(name[..index].trim()),
+            String::from(name[index..].trim()),
         )),
         None => Err("Malformed name: no spaces")
     }
