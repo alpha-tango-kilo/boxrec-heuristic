@@ -92,9 +92,8 @@ impl BoxRecAPI {
 
     pub fn get_boxer_page_by_id(&self, id: &u32) -> Result<Html, Box<dyn Error>> {
         let url = format!("https://boxrec.com/en/proboxer/{}", id);
-        let req = self.reqwest_client.get(&url).send()?;
-        logged_out(&req)?;
-        Ok(Html::parse_document(req.text()?.as_str()))
+        let response = self.reqwest_client.get(&url).send()?;
+        Ok(Html::parse_document(unwrap_response(response)?.as_str()))
     }
 
     pub fn boxer_search(&self, forename: &str, surname: &str, active_only: bool) -> Result<u32, Box<dyn Error>> {
@@ -109,10 +108,8 @@ impl BoxRecAPI {
         );
         let response = self.reqwest_client.get(&url).send()?;
 
-        logged_out(&response)?;
-
         // Step 2: parse results
-        let response = response.text()?;
+        let response = unwrap_response(response)?;
         let response = Html::parse_document(&response);
         let selector = Selector::parse("a.personLink").unwrap();
         let mut results = response.select(&selector).peekable();
@@ -221,10 +218,15 @@ impl BoxRecAPI {
     }
 }
 
-fn logged_out(response: &Response) -> Result<(), &'static str> {
+fn unwrap_response(response: Response) -> Result<String, Box<dyn Error>> {
     if response.url().as_str().contains("login") {
-        Err("Logged out by BoxRec")
+        Err("Logged out by BoxRec".into())
     } else {
-        Ok(())
+        let text = response.text()?;
+        if text.contains("Please complete the form below to continue...") {
+            Err("Being prompted for reCAPTCHA".into())
+        } else {
+            Ok(text)
+        }
     }
 }
