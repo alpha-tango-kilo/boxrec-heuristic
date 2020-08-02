@@ -1,14 +1,7 @@
 use std::process::exit;
 
-use boxrec_tool::Args;
-
 fn main() {
-    let config = Args::new(std::env::args()).unwrap_or_else(|err| {
-        eprintln!("Error parsing arguments: {}", err);
-        exit(1);
-    });
-
-    if let Err(err) = boxrec_tool::run(config) {
+    if let Err(err) = boxrec_tool::run() {
         eprintln!("Error while running: {}", err);
         exit(2);
     }

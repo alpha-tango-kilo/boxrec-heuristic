@@ -18,24 +18,6 @@ mod boxrec;
 const CONFIG_PATH: &str = "./config.yaml";
 const NOTIFY_THRESHOLD: f32 = 25f32; // TODO: Add to config file
 
-pub struct Args {
-    name_one: String,
-    name_two: String,
-}
-
-impl Args {
-    pub fn new(mut args: std::env::Args) -> Result<Args, Box<dyn Error>> {
-        args.next();
-
-        Ok(Args {
-            name_one: args.next()
-                .ok_or("Missing boxers' names")?,
-            name_two: args.next()
-                .ok_or("Missing second boxer's name")?,
-        })
-    }
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     pub data_path: String,
