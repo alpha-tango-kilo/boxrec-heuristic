@@ -97,32 +97,42 @@ fn pretty_print_notification(winner_to_be: &str, win_percent: &f32, loser_to_be:
     );
 }
 
-pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
+pub fn run() -> Result<(), Box<dyn Error>> {
     // TODO: make this changeable using a flag
     let config = Config::new(CONFIG_PATH);
 
-    //let client = BoxRecAPI::new()?;
-    //client.login(&config)?;
+    let client = BoxRecAPI::new()?;
+    client.login(&config)?;
 
     let betfair = BetfairAPI::new()?;
     let bouts = betfair.get_listed_bouts()?;
-    println!("{:#?}", bouts);
+    //println!("{:#?}", bouts);
 
-    /*match Boxer::new_by_id(&client, 314868) {
-        Some(b) => println!("It worked! {:?}", b),
-        None => println!("It didn't work :("),
-    };*/
-
-    // API stuffs
-    //client.get_page_by_id(&client, 629465)?;
-    //client.boxer_search(&client, "Floyd", "Mark", false)?;
-    //let bout_odds = client.get_bout_odds(&626585, "ted cheeseman")?;
-    //println!("{:?}", bout_odds);
+    for bout in bouts.iter() {
+        let fighter_one = match Boxer::new_by_name(&client, &bout.fighter_one) {
+            Some(f) => f,
+            None => continue,
+        };
+        let fighter_two = match Boxer::new_by_name(&client, &bout.fighter_two) {
+            Some(f) => f,
+            None => continue,
+        };
+        let boxrec_odds = match fighter_one.get_bout_scores(&client, &fighter_two) {
+            Ok(m) => m,
+            Err(err) => {
+                eprintln!("Failed to get matchup between {} & {}",
+                          fighter_one.get_name(),
+                          fighter_two.get_name());
+                continue;
+            },
+        };
+        compare_and_notify(&boxrec_odds, bout, &25f32);
+    }
 
     // If caching is enabled, do things here
-    if let Some(cache_path) = &config.cache_path {
+    /*if let Some(cache_path) = &config.cache_path {
 
-    }
+    }*/
 
     //config.save()?;
     Ok(())
