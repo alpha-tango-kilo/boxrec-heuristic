@@ -1,5 +1,6 @@
 #![allow(dead_code, unused_variables)]
 
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{self, File};
 use std::io::Write;
@@ -108,15 +109,35 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let bouts = betfair.get_listed_bouts()?;
     //println!("{:#?}", bouts);
 
+    let mut boxers: HashMap<String, Boxer> = HashMap::new();
+
     for bout in bouts.iter() {
-        let fighter_one = match Boxer::new_by_name(&client, &bout.fighter_one) {
+        let fighter_one = match boxers.get(&bout.fighter_one) {
             Some(f) => f,
-            None => continue,
+            None => {
+                match Boxer::new_by_name(&client, &bout.fighter_one) {
+                    Some(f) => {
+                        boxers.insert(bout.fighter_one.to_string(), f);
+                        boxers.get(&bout.fighter_one).unwrap()
+                    },
+                    None => continue,
+                }
+            },
         };
-        let fighter_two = match Boxer::new_by_name(&client, &bout.fighter_two) {
+
+        let fighter_two = match boxers.get(&bout.fighter_two) {
             Some(f) => f,
-            None => continue,
+            None => {
+                match Boxer::new_by_name(&client, &bout.fighter_two) {
+                    Some(f) => {
+                        boxers.insert(bout.fighter_two.to_string(), f);
+                        boxers.get(&bout.fighter_two).unwrap()
+                    },
+                    None => continue,
+                }
+            },
         };
+
         let boxrec_odds = match fighter_one.get_bout_scores(&client, &fighter_two) {
             Ok(m) => m,
             Err(err) => {
