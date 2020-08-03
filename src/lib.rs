@@ -112,30 +112,46 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let mut boxers: HashMap<String, Boxer> = HashMap::new();
 
     for bout in bouts.iter() {
-        let fighter_one = match boxers.get(&bout.fighter_one) {
-            Some(f) => f,
-            None => {
-                match Boxer::new_by_name(&client, &bout.fighter_one) {
-                    Some(f) => {
-                        boxers.insert(bout.fighter_one.to_string(), f);
-                        boxers.get(&bout.fighter_one).unwrap()
-                    },
-                    None => continue,
-                }
-            },
-        };
-
-        let fighter_two = match boxers.get(&bout.fighter_two) {
-            Some(f) => f,
-            None => {
+        let (fighter_one, fighter_two) = match (
+            boxers.contains_key(&bout.fighter_one),
+            boxers.contains_key(&bout.fighter_two))
+        {
+            (true, true) => (boxers.get(&bout.fighter_one).unwrap(),
+                             boxers.get(&bout.fighter_two).unwrap()),
+            (true, false) => {
                 match Boxer::new_by_name(&client, &bout.fighter_two) {
-                    Some(f) => {
-                        boxers.insert(bout.fighter_two.to_string(), f);
-                        boxers.get(&bout.fighter_two).unwrap()
-                    },
+                    Some(f2) => {
+                        boxers.insert(bout.fighter_two.to_string(), f2);
+                        (boxers.get(&bout.fighter_one).unwrap(),
+                         boxers.get(&bout.fighter_two).unwrap())
+                    }
                     None => continue,
                 }
-            },
+            }
+            (false, true) => {
+                match Boxer::new_by_name(&client, &bout.fighter_one) {
+                    Some(f1) => {
+                        boxers.insert(bout.fighter_one.to_string(), f1);
+                        (boxers.get(&bout.fighter_one).unwrap(),
+                         boxers.get(&bout.fighter_two).unwrap())
+                    }
+                    None => continue,
+                }
+            }
+            (false, false) => {
+                match Boxer::new_by_name(&client, &bout.fighter_one) {
+                    Some(f1) => {
+                        match Boxer::new_by_name(&client, &bout.fighter_two) {
+                            Some(f2) => boxers.insert(bout.fighter_two.to_string(), f2),
+                            None => continue,
+                        };
+                        boxers.insert(bout.fighter_one.to_string(), f1);
+                        (boxers.get(&bout.fighter_one).unwrap(),
+                         boxers.get(&bout.fighter_two).unwrap())
+                    }
+                    None => continue,
+                }
+            }
         };
 
         let boxrec_odds = match fighter_one.get_bout_scores(&client, &fighter_two) {
