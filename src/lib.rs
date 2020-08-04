@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 
 use serde::{Deserialize, Serialize};
@@ -47,7 +47,7 @@ impl Config {
     fn new_default() -> Config {
         Config {
             data_path: String::from("./data"),
-            cache_path: Some("./cache.csv".to_string()), // Cache by default
+            cache_path: Some("./cache.yml".to_string()), // Cache by default
             username: None,
             password: None,
         }
@@ -185,10 +185,20 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         compare_and_notify(&boxrec_odds, bout, &25f32);
     }
 
-    // If caching is enabled, do things here
-    /*if let Some(cache_path) = &config.cache_path {
-
-    }*/
+    // Save cache after running
+    if let Some(cache_path) = &config.cache_path {
+        let serialised = serde_yaml::to_string(&boxers.values().collect::<Vec<_>>())?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(cache_path)?;
+        file.write(
+            serde_yaml::to_string(
+                &boxers.values()
+                    .collect::<Vec<_>>()
+            )?.as_bytes())?;
+    }
 
     //config.save()?;
     Ok(())
