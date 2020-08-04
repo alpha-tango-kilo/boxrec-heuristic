@@ -177,7 +177,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                         // Then get both references
                         (boxers.get(&bout.fighter_one).unwrap(),
                          boxers.get(&bout.fighter_two).unwrap())
-                    }
+                    },
                     // If it doesn't work, skip this bout
                     None => continue,
                 }
@@ -189,7 +189,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                         boxers.insert(bout.fighter_one.to_string(), f1);
                         (boxers.get(&bout.fighter_one).unwrap(),
                          boxers.get(&bout.fighter_two).unwrap())
-                    }
+                    },
                     None => continue,
                 }
             },
