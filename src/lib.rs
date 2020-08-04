@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
 
 use serde::{Deserialize, Serialize};
@@ -17,14 +17,14 @@ mod boxer;
 mod boxrec;
 
 const CONFIG_PATH: &str = "./config.yaml";
-const NOTIFY_THRESHOLD: f32 = 25f32; // TODO: Add to config file
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
-    pub data_path: String,
     pub cache_path: Option<String>,
     pub username: Option<String>,
     pub password: Option<String>,
+    request_timeout: Option<u64>,
+    notify_threshold: Option<f32>,
 }
 
 impl Config {
@@ -45,22 +45,44 @@ impl Config {
     }
 
     fn new_default() -> Config {
+        // Sensible defaults™
         Config {
-            data_path: String::from("./data"),
-            cache_path: Some("./cache.yml".to_string()), // Cache by default
+            cache_path: Some(String::from("./cache.yml")), // Cache by default
             username: None,
             password: None,
+            request_timeout: Some(500),
+            notify_threshold: Some(15f32),
         }
     }
 
-    fn save(self) -> Result<(), Box<dyn Error>> {
-        let se = serde_yaml::to_string(&self)?;
-        match File::create(CONFIG_PATH)?.write_all(se.as_bytes()) {
+    fn save(&self) -> Result<(), Box<dyn Error>> {
+        let ser = serde_yaml::to_string(&self)?;
+        match OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(CONFIG_PATH)?
+            .write_all(ser.as_bytes())
+        {
             Ok(_) => Ok(()),
             Err(err) => {
                 eprintln!("Failed to save config file (Error: {})", err);
+                eprintln!("Here's the config if you wanted it:\n{}", ser);
                 Err(err.into())
             },
+        }
+    }
+
+    fn get_request_timeout(&self) -> u64 {
+        match &self.request_timeout {
+            Some(ms) => *ms,
+            None => Config::new_default().request_timeout.unwrap(),
+        }
+    }
+
+    fn get_notify_threshold(&self) -> f32 {
+        match &self.notify_threshold {
+            Some(percent) => *percent,
+            None => Config::new_default().notify_threshold.unwrap(),
         }
     }
 }
@@ -104,7 +126,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let config = Config::new(CONFIG_PATH);
 
     // Connect to BoxRec
-    let mut boxrec = BoxRecAPI::new(500)?;
+    let mut boxrec = BoxRecAPI::new(config.get_request_timeout())?;
     boxrec.login(&config)?;
 
     // Connect to Betfair
@@ -201,7 +223,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                 continue;
             },
         };
-        compare_and_notify(&boxrec_odds, bout, &25f32);
+        compare_and_notify(&boxrec_odds, bout, &config.get_notify_threshold());
     }
 
     // Save disk cache after running
