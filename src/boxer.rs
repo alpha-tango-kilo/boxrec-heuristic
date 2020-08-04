@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::fmt::{self, Display};
 
 use regex::Regex;
 use scraper::Selector;
@@ -123,6 +124,12 @@ impl Boxer {
             }
         }
         Err("Couldn't find scores on bout page".into())
+    }
+}
+
+impl Display for Boxer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} (ID: {})", self.get_name(), self.id)
     }
 }
 
