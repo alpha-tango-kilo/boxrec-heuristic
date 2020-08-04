@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{ErrorKind, Write};
 
 use serde::{Deserialize, Serialize};
 
@@ -118,7 +118,16 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 
     // Load disk cache before running
     if let Some(cache_path) = &config.cache_path {
-
+        match fs::read_to_string(cache_path) {
+            Ok(serialised) => serde_yaml::from_str::<Vec<Boxer>>(&serialised)?
+                    .iter()
+                    .for_each(|b| { boxers.insert(b.get_name(), b.to_owned()); }),
+            Err(err) => match err.kind() {
+                ErrorKind::NotFound => {},
+                other => return Err(err.into()),
+            },
+        };
+        //println!("Read from disk cache into runtime index:\n{:#?}", boxers);
     }
 
     for bout in bouts.iter() {
@@ -150,7 +159,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                     // If it doesn't work, skip this bout
                     None => continue,
                 }
-            }
+            },
             // Same case as above, but other boxer is unknown
             (false, true) => {
                 match Boxer::new_by_name(&boxrec, &bout.fighter_one) {
@@ -161,7 +170,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                     }
                     None => continue,
                 }
-            }
+            },
             // If neither boxer is known
             (false, false) => {
                 // Try and make the first
@@ -180,7 +189,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                 // Get both references
                 (boxers.get(&bout.fighter_one).unwrap(),
                  boxers.get(&bout.fighter_two).unwrap())
-            }
+            },
         };
 
         let boxrec_odds = match fighter_one.get_bout_scores(&boxrec, &fighter_two) {

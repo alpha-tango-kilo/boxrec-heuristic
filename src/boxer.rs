@@ -31,7 +31,7 @@ impl<'a> Matchup<'a> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Boxer {
     id: u32,
     forename: String,
