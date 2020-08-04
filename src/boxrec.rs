@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::{self, Write};
+use std::ops::Sub;
+use std::thread::sleep;
+use std::time::{Duration, SystemTime};
 
 use regex::Regex;
 use reqwest::blocking::{Client, Response};
@@ -53,20 +56,38 @@ impl Login {
 
 pub struct BoxRecAPI {
     reqwest_client: Client,
+    request_delay: Duration,
+    last_sent: SystemTime,
 }
 
 impl BoxRecAPI {
-    pub fn new() -> Result<BoxRecAPI, reqwest::Error> {
+    pub fn new(request_delay: u64) -> Result<BoxRecAPI, reqwest::Error> {
         // Basic synchronous client with cookies enabled
+        let request_delay = Duration::from_millis(request_delay);
         Ok(BoxRecAPI {
             reqwest_client:
                 Client::builder()
                     .cookie_store(true)
                     .build()?,
+            request_delay,
+            last_sent: SystemTime::now().sub(request_delay),
         })
     }
 
-    pub fn login(&self, config: &Config) -> Result<(), Box<dyn Error>> {
+    // Returns a reference to self to allow for chaining
+    fn wait_if_needed(&mut self) -> &Self {
+        // Calculate the time until we're okay to make the next request
+        let time_until_ok = SystemTime::now().duration_since(self.last_sent).unwrap() - self.request_delay;
+        // If we need to wait, do
+        if time_until_ok.as_millis() > 0 {
+            sleep(time_until_ok);
+        }
+        // Update last sent time
+        self.last_sent = SystemTime::now();
+        self
+    }
+
+    pub fn login(&mut self, config: &Config) -> Result<(), Box<dyn Error>> {
         let login = Login::get(config)?;
 
         let mut form_data = HashMap::new();
@@ -77,7 +98,8 @@ impl BoxRecAPI {
 
         println!("Sending login request");
 
-        let response = self.reqwest_client.post("https://boxrec.com/en/login")
+        let response = self.wait_if_needed().reqwest_client
+            .post("https://boxrec.com/en/login")
             .form(&form_data)
             .send()?;
 
@@ -90,13 +112,13 @@ impl BoxRecAPI {
         }
     }
 
-    pub fn get_boxer_page_by_id(&self, id: &u32) -> Result<Html, Box<dyn Error>> {
+    pub fn get_boxer_page_by_id(&mut self, id: &u32) -> Result<Html, Box<dyn Error>> {
         let url = format!("https://boxrec.com/en/proboxer/{}", id);
-        let response = self.reqwest_client.get(&url).send()?;
+        let response = self.wait_if_needed().reqwest_client.get(&url).send()?;
         Ok(Html::parse_document(unwrap_response(response)?.as_str()))
     }
 
-    pub fn boxer_search(&self, forename: &str, surname: &str, active_only: bool) -> Result<u32, Box<dyn Error>> {
+    pub fn boxer_search(&mut self, forename: &str, surname: &str, active_only: bool) -> Result<u32, Box<dyn Error>> {
         // Step 1: perform request
         let forename = forename.to_lowercase();
         let surname = surname.to_lowercase();
@@ -106,7 +128,7 @@ impl BoxRecAPI {
             surname,
             if active_only { "a" } else { "" }
         );
-        let response = self.reqwest_client.get(&url).send()?;
+        let response = self.wait_if_needed().reqwest_client.get(&url).send()?;
 
         // Step 2: parse results
         let response = unwrap_response(response)?;
@@ -184,7 +206,7 @@ impl BoxRecAPI {
     }
 
     // TODO: maybe make args a bit more user friendly
-    pub fn get_bout_page(&self, id_1: &u32, name_2: &str) -> Result<Html, Box<dyn Error>> {
+    pub fn get_bout_page(&mut self, id_1: &u32, name_2: &str) -> Result<Html, Box<dyn Error>> {
         let boxer_1 = self.get_boxer_page_by_id(id_1)?;
         let name_2 = name_2.to_lowercase();
         let scheduled_bouts_selector = Selector::parse(".scheduleRow").unwrap();
@@ -206,7 +228,10 @@ impl BoxRecAPI {
                     println!("Found matching bout");
                     // Once a matching bout has been found, download the page
                     let url = format!("https://boxrec.com{}", link.as_str());
-                    let bout_page = self.reqwest_client.get(&url).send()?.text()?;
+                    let bout_page = self.wait_if_needed().reqwest_client
+                        .get(&url)
+                        .send()?
+                        .text()?;
                     // Pass onto the next stage
                     return Ok(Html::parse_document(&bout_page));
                 },

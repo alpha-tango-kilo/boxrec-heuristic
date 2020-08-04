@@ -39,7 +39,7 @@ pub struct Boxer {
 }
 
 impl Boxer {
-    pub fn new_by_name(api: &BoxRecAPI, name: &str) -> Option<Boxer> {
+    pub fn new_by_name(api: &mut BoxRecAPI, name: &str) -> Option<Boxer> {
         let (forename, surname) = match split_name(&name) {
             Ok(tup) => tup,
             Err(err) => {
@@ -60,7 +60,7 @@ impl Boxer {
         }
     }
 
-    pub fn new_by_id(api: &BoxRecAPI, id: u32) -> Option<Boxer> {
+    pub fn new_by_id(api: &mut BoxRecAPI, id: u32) -> Option<Boxer> {
         let page = match api.get_boxer_page_by_id(&id) {
             Ok(page) => page,
             Err(err) => {
@@ -98,7 +98,7 @@ impl Boxer {
 
     pub fn get_id(&self) -> &u32 { &self.id }
 
-    pub fn get_bout_scores<'a>(&'a self, api: &BoxRecAPI, opponent: &'a Boxer) -> Result<Matchup<'a>, Box<dyn Error>> {
+    pub fn get_bout_scores<'a>(&'a self, api: &mut BoxRecAPI, opponent: &'a Boxer) -> Result<Matchup<'a>, Box<dyn Error>> {
         let bout_page = api.get_bout_page(&self.id, &opponent.get_name())?;
         let table_row_selector = Selector::parse(".responseLessDataTable").unwrap();
         let float_regex = Regex::new(r"[0-9]+\.[0-9]+").unwrap();

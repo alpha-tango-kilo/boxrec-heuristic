@@ -54,7 +54,7 @@ impl Config {
     }
 
     fn save(self) -> Result<(), Box<dyn Error>> {
-        let se = serde_yaml::to_string(&self).unwrap();
+        let se = serde_yaml::to_string(&self)?;
         match File::create(CONFIG_PATH)?.write_all(se.as_bytes()) {
             Ok(_) => Ok(()),
             Err(err) => {
@@ -104,7 +104,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let config = Config::new(CONFIG_PATH);
 
     // Connect to BoxRec
-    let boxrec = BoxRecAPI::new()?;
+    let mut boxrec = BoxRecAPI::new(500)?;
     boxrec.login(&config)?;
 
     // Connect to Betfair
@@ -147,7 +147,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             // If one is unknown
             (true, false) => {
                 // Try and create the unknown one
-                match Boxer::new_by_name(&boxrec, &bout.fighter_two) {
+                match Boxer::new_by_name(&mut boxrec, &bout.fighter_two) {
                     // If it works
                     Some(f2) => {
                         // Insert it into the map
@@ -162,7 +162,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             },
             // Same case as above, but other boxer is unknown
             (false, true) => {
-                match Boxer::new_by_name(&boxrec, &bout.fighter_one) {
+                match Boxer::new_by_name(&mut boxrec, &bout.fighter_one) {
                     Some(f1) => {
                         boxers.insert(bout.fighter_one.to_string(), f1);
                         (boxers.get(&bout.fighter_one).unwrap(),
@@ -174,13 +174,13 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             // If neither boxer is known
             (false, false) => {
                 // Try and make the first
-                match Boxer::new_by_name(&boxrec, &bout.fighter_one) {
+                match Boxer::new_by_name(&mut boxrec, &bout.fighter_one) {
                     // If it worked, insert
                     Some(f1) => boxers.insert(bout.fighter_one.to_string(), f1),
                     // Skip this bout otherwise
                     None => continue,
                 };
-                match Boxer::new_by_name(&boxrec, &bout.fighter_two) {
+                match Boxer::new_by_name(&mut boxrec, &bout.fighter_two) {
                     // If it worked, insert
                     Some(f2) => boxers.insert(bout.fighter_two.to_string(), f2),
                     // Skip this bout if it didn't (at least we still have one more dude documented)
@@ -192,7 +192,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             },
         };
 
-        let boxrec_odds = match fighter_one.get_bout_scores(&boxrec, &fighter_two) {
+        let boxrec_odds = match fighter_one.get_bout_scores(&mut boxrec, &fighter_two) {
             Ok(m) => m,
             Err(err) => {
                 eprintln!("Failed to get matchup between {} & {}",
