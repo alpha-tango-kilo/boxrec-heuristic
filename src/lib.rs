@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_variables)]
+#![allow(dead_code)]
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -146,7 +146,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                     .for_each(|b| { boxers.insert(b.get_name(), b.to_owned()); }),
             Err(err) => match err.kind() {
                 ErrorKind::NotFound => {},
-                other => return Err(err.into()),
+                _ => return Err(err.into()),
             },
         };
         //println!("Read from disk cache into runtime index:\n{:#?}", boxers);
@@ -217,9 +217,10 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         let boxrec_odds = match fighter_one.get_bout_scores(&mut boxrec, &fighter_two) {
             Ok(m) => m,
             Err(err) => {
-                eprintln!("Failed to get matchup between {} & {}",
+                eprintln!("Failed to get matchup between {} & {} (Error: {})",
                           fighter_one.get_name(),
-                          fighter_two.get_name());
+                          fighter_two.get_name(),
+                          err);
                 continue;
             },
         };
