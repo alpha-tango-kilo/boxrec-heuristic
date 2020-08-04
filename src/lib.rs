@@ -99,17 +99,27 @@ fn pretty_print_notification(winner_to_be: &str, win_percent: &f32, loser_to_be:
 }
 
 pub fn run() -> Result<(), Box<dyn Error>> {
+    // Load config
     // TODO: make this changeable using a flag
     let config = Config::new(CONFIG_PATH);
 
-    let client = BoxRecAPI::new()?;
-    client.login(&config)?;
+    // Connect to BoxRec
+    let boxrec = BoxRecAPI::new()?;
+    boxrec.login(&config)?;
 
+    // Connect to Betfair
     let betfair = BetfairAPI::new()?;
+    // Scrape Betfair
     let bouts = betfair.get_listed_bouts()?;
     //println!("{:#?}", bouts);
 
+    // Create Boxer HashMap (runtime cache/index of Boxers by name)
     let mut boxers: HashMap<String, Boxer> = HashMap::new();
+
+    // Load disk cache before running
+    if let Some(cache_path) = &config.cache_path {
+
+    }
 
     for bout in bouts.iter() {
         /*
@@ -128,7 +138,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             // If one is unknown
             (true, false) => {
                 // Try and create the unknown one
-                match Boxer::new_by_name(&client, &bout.fighter_two) {
+                match Boxer::new_by_name(&boxrec, &bout.fighter_two) {
                     // If it works
                     Some(f2) => {
                         // Insert it into the map
@@ -143,7 +153,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             }
             // Same case as above, but other boxer is unknown
             (false, true) => {
-                match Boxer::new_by_name(&client, &bout.fighter_one) {
+                match Boxer::new_by_name(&boxrec, &bout.fighter_one) {
                     Some(f1) => {
                         boxers.insert(bout.fighter_one.to_string(), f1);
                         (boxers.get(&bout.fighter_one).unwrap(),
@@ -155,13 +165,13 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             // If neither boxer is known
             (false, false) => {
                 // Try and make the first
-                match Boxer::new_by_name(&client, &bout.fighter_one) {
+                match Boxer::new_by_name(&boxrec, &bout.fighter_one) {
                     // If it worked, insert
                     Some(f1) => boxers.insert(bout.fighter_one.to_string(), f1),
                     // Skip this bout otherwise
                     None => continue,
                 };
-                match Boxer::new_by_name(&client, &bout.fighter_two) {
+                match Boxer::new_by_name(&boxrec, &bout.fighter_two) {
                     // If it worked, insert
                     Some(f2) => boxers.insert(bout.fighter_two.to_string(), f2),
                     // Skip this bout if it didn't (at least we still have one more dude documented)
@@ -173,7 +183,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             }
         };
 
-        let boxrec_odds = match fighter_one.get_bout_scores(&client, &fighter_two) {
+        let boxrec_odds = match fighter_one.get_bout_scores(&boxrec, &fighter_two) {
             Ok(m) => m,
             Err(err) => {
                 eprintln!("Failed to get matchup between {} & {}",
@@ -185,9 +195,8 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         compare_and_notify(&boxrec_odds, bout, &25f32);
     }
 
-    // Save cache after running
+    // Save disk cache after running
     if let Some(cache_path) = &config.cache_path {
-        let serialised = serde_yaml::to_string(&boxers.values().collect::<Vec<_>>())?;
         let mut file = OpenOptions::new()
             .write(true)
             .truncate(true)
