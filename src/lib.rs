@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::error::Error;
+use std::fmt::{self, Display, Formatter};
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
 
@@ -35,7 +36,7 @@ impl Config {
                 Err(err) => {
                     eprintln!("Failed to parse config file, using default (Error: {})", err);
                     Config::new_default()
-                }
+                },
             },
             Err(err) => {
                 eprintln!("Failed to read config file, using default (Error: {})", err);
@@ -50,7 +51,7 @@ impl Config {
             cache_path: Some(String::from("./.cache")), // Cache by default
             username: None,
             password: None,
-            request_timeout: Some(500),
+            request_timeout: Some(0),
             notify_threshold: Some(15f32),
         }
     }
@@ -87,7 +88,43 @@ impl Config {
     }
 }
 
-fn compare_and_notify(matchup: &Matchup, bout: &Bout, threshold: &f32) {
+#[derive(Serialize, Deserialize)]
+struct BoutMetadata {
+    bout: Bout, // TODO: Maybe take a reference so memory usage isn't as ass?
+    status: BoutStatus,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
+enum BoutStatus {
+    MissingBoxers,
+    MissingBoutPage,
+    Checked,
+    Announced,
+}
+
+impl BoutStatus {
+    fn next(self) -> Result<Self, &'static str> {
+        match self {
+            BoutStatus::MissingBoxers => Ok(BoutStatus::MissingBoutPage),
+            BoutStatus::MissingBoutPage => Ok(BoutStatus::Checked),
+            BoutStatus::Checked => Ok(BoutStatus::Announced),
+            BoutStatus::Announced => Err("No next status"),
+        }
+    }
+}
+
+impl Display for BoutStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            BoutStatus::MissingBoxers => "Missing boxers",
+            BoutStatus::MissingBoutPage => "Missing bout page",
+            BoutStatus::Checked => "Odds compared between BoxRec & Betfair",
+            BoutStatus::Announced => "User notified of odds differential",
+        })
+    }
+}
+
+fn compare_and_notify(matchup: &Matchup, bout: &Bout, threshold: &f32) -> BoutStatus {
     if matchup.win_percent_one - bout.odds.one_wins.as_percent() > *threshold {
         pretty_print_notification(
             &matchup.fighter_one.get_name(),
@@ -96,6 +133,7 @@ fn compare_and_notify(matchup: &Matchup, bout: &Bout, threshold: &f32) {
             &bout.odds.one_wins.as_frac(),
             &matchup.warning,
         );
+        BoutStatus::Announced
     } else if matchup.win_percent_two - bout.odds.two_wins.as_percent() > *threshold {
         pretty_print_notification(
             &matchup.fighter_two.get_name(),
@@ -104,6 +142,9 @@ fn compare_and_notify(matchup: &Matchup, bout: &Bout, threshold: &f32) {
             &bout.odds.two_wins.as_frac(),
             &matchup.warning,
         );
+        BoutStatus::Announced
+    } else {
+        BoutStatus::Checked
     }
 }
 
@@ -137,6 +178,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 
     // Create Boxer HashMap (runtime cache/index of Boxers by name)
     let mut boxers: HashMap<String, Boxer> = HashMap::new();
+    let mut bout_metadata: Vec<BoutMetadata> = Vec::new();
 
     // Load disk cache before running
     if let Some(cache_path) = &config.cache_path {
@@ -194,7 +236,13 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                          boxers.get(&bout.fighter_two).unwrap())
                     },
                     // If it doesn't work, skip this bout
-                    None => continue,
+                    None => {
+                        bout_metadata.push(BoutMetadata {
+                            bout: bout.clone(),
+                            status: BoutStatus::MissingBoxers,
+                        });
+                        continue;
+                    },
                 }
             },
             // Same case as above, but other boxer is unknown
@@ -205,7 +253,13 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                         (boxers.get(&bout.fighter_one).unwrap(),
                          boxers.get(&bout.fighter_two).unwrap())
                     },
-                    None => continue,
+                    None => {
+                        bout_metadata.push(BoutMetadata {
+                            bout: bout.clone(),
+                            status: BoutStatus::MissingBoxers,
+                        });
+                        continue;
+                    },
                 }
             },
             // If neither boxer is known
@@ -215,13 +269,25 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                     // If it worked, insert
                     Some(f1) => boxers.insert(bout.fighter_one.to_string(), f1),
                     // Skip this bout otherwise
-                    None => continue,
+                    None => {
+                        bout_metadata.push(BoutMetadata {
+                            bout: bout.clone(),
+                            status: BoutStatus::MissingBoxers,
+                        });
+                        continue;
+                    },
                 };
                 match Boxer::new_by_name(&mut boxrec, &bout.fighter_two) {
                     // If it worked, insert
                     Some(f2) => boxers.insert(bout.fighter_two.to_string(), f2),
                     // Skip this bout if it didn't (at least we still have one more dude documented)
-                    None => continue,
+                    None => {
+                        bout_metadata.push(BoutMetadata {
+                            bout: bout.clone(),
+                            status: BoutStatus::MissingBoxers,
+                        });
+                        continue;
+                    },
                 };
                 // Get both references
                 (boxers.get(&bout.fighter_one).unwrap(),
@@ -236,10 +302,20 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                           fighter_one.get_name(),
                           fighter_two.get_name(),
                           err);
+                bout_metadata.push(BoutMetadata {
+                    bout: bout.clone(),
+                    status: BoutStatus::MissingBoutPage,
+                });
                 continue;
             },
         };
-        compare_and_notify(&boxrec_odds, bout, &config.get_notify_threshold());
+
+        bout_metadata.push(BoutMetadata {
+            bout: bout.clone(),
+            status: compare_and_notify(&boxrec_odds,
+                                       bout,
+                                       &config.get_notify_threshold())
+        });
     }
 
     // Save disk cache after running
@@ -263,7 +339,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             .open(format!("{}/bouts.yml", cache_path))?;
         bouts_file.write(
             serde_yaml::to_string(
-                &bouts
+                &bout_metadata
             )?.as_bytes()
         )?;
     }
