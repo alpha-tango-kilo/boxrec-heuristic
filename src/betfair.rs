@@ -31,30 +31,38 @@ impl Odds {
         // But its CSS is no different to the parent <a> element, so I end up getting the whole <span> element instead of the inner HTML of it, which would be just the fraction
         // The arg typically looks something like "\n<span class=\"ui-runner-price ui-924_231809773-28625857 ui-display-fraction-price\">\n8/15\n<", "span>\n"
 
-        // Split on /
-        let mut parts = s.split("/");
+        // Edge case - 'evens' odds
+        if s.contains("EVS") {
+            Ok(Odds {
+                top: 1,
+                bottom: 1,
+            })
+        } else {
+            // Split on /
+            let mut parts = s.split("/");
 
-        Ok(Odds {
-            top: parts.next()
-                // Check we actually got something - woo safety!
-                .ok_or("Top of fraction not found")?
-                // Reverse split because for the top number it's at the end of the string
-                .rsplit("\n")
-                // The number is the first thing as it's always after a \n (see above sample)
-                .next()
-                // Unwrapping this option can never fail because a split always returns an iterator of at least one item
-                .unwrap()
-                // Make it a u32!
-                .parse()?,
+            Ok(Odds {
+                top: parts.next()
+                    // Check we actually got something - woo safety!
+                    .ok_or("Top of fraction not found")?
+                    // Reverse split because for the top number it's at the end of the string
+                    .rsplit("\n")
+                    // The number is the first thing as it's always after a \n (see above sample)
+                    .next()
+                    // Unwrapping this option can never fail because a split always returns an iterator of at least one item
+                    .unwrap()
+                    // Make it a u32!
+                    .parse()?,
 
-            bottom: parts.next()
-                .ok_or("Bottom of fraction not found")?
-                // Normal split in this case as the number should be the first item before a \n (see above sample)
-                .split("\n")
-                .next()
-                .unwrap()
-                .parse()?,
-        })
+                bottom: parts.next()
+                    .ok_or("Bottom of fraction not found")?
+                    // Normal split in this case as the number should be the first item before a \n (see above sample)
+                    .split("\n")
+                    .next()
+                    .unwrap()
+                    .parse()?,
+            })
+        }
     }
 
     // Used to quote profit
