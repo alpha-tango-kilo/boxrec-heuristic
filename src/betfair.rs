@@ -2,22 +2,23 @@ use std::error::Error;
 
 use reqwest::blocking::Client;
 use scraper::{ElementRef, Html, Selector};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Bout {
     pub fighter_one: String,
     pub fighter_two: String,
     pub odds: BoutOdds,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BoutOdds {
     pub one_wins: Odds,
     pub draw: Odds,
     pub two_wins: Odds,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Odds {
     top: u32,
     bottom: u32,

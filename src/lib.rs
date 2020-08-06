@@ -16,7 +16,7 @@ mod betfair;
 mod boxer;
 mod boxrec;
 
-const CONFIG_PATH: &str = "./config.yaml";
+const CONFIG_PATH: &str = "./config.yml";
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
@@ -244,16 +244,28 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 
     // Save disk cache after running
     if let Some(cache_path) = &config.cache_path {
-        let mut file = OpenOptions::new()
+        let mut boxers_file = OpenOptions::new()
             .write(true)
             .truncate(true)
             .create(true)
             .open(format!("{}/boxers.yml", cache_path))?;
-        file.write(
+        boxers_file.write(
             serde_yaml::to_string(
                 &boxers.values()
                     .collect::<Vec<_>>()
-            )?.as_bytes())?;
+            )?.as_bytes()
+        )?;
+
+        let mut bouts_file = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(format!("{}/bouts.yml", cache_path))?;
+        bouts_file.write(
+            serde_yaml::to_string(
+                &bouts
+            )?.as_bytes()
+        )?;
     }
 
     //config.save()?;
