@@ -211,7 +211,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 
         // Read pre-existing bouts cache if present and in a good format
         match fs::read_to_string(format!("{}/bouts.yml", cache_path)) {
-            Ok(serialised) => serde_yaml::from_str::<Vec<BoutMetadata>>(&serialised)?,
+            Ok(serialised) => bout_metadata = serde_yaml::from_str::<Vec<BoutMetadata>>(&serialised)?,
             Err(err) => match err.kind() {
                 ErrorKind::NotFound => {},
                 _ => return Err(err.into()),
