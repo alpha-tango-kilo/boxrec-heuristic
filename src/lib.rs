@@ -47,7 +47,7 @@ impl Config {
     fn new_default() -> Config {
         // Sensible defaults™
         Config {
-            cache_path: Some(String::from("./cache.yml")), // Cache by default
+            cache_path: Some(String::from("./.cache")), // Cache by default
             username: None,
             password: None,
             request_timeout: Some(500),
@@ -140,7 +140,22 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 
     // Load disk cache before running
     if let Some(cache_path) = &config.cache_path {
-        match fs::read_to_string(cache_path) {
+        // Check for and create cache folder
+        match fs::metadata(cache_path) {
+            // If Ok(), it exists
+            // If it's a file, get scared, otherwise, we have a folder!
+            Ok(md) => if md.is_file() {
+                return Err("Cache path points to an existing file".into());
+            },
+            Err(e) => match e.kind() {
+                // If the folder doesn't exist yet, try and make it
+                ErrorKind::NotFound => fs::create_dir_all(cache_path)?,
+                // If there's another error be spooked
+                _ => return Err(e.into()),
+            }
+        };
+        // Read pre-existing boxers cache if present and in a good format
+        match fs::read_to_string(format!("{}/boxers.yml", cache_path)) {
             Ok(serialised) => serde_yaml::from_str::<Vec<Boxer>>(&serialised)?
                     .iter()
                     .for_each(|b| { boxers.insert(b.get_name(), b.to_owned()); }),
@@ -233,7 +248,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             .write(true)
             .truncate(true)
             .create(true)
-            .open(cache_path)?;
+            .open(format!("{}/boxers.yml", cache_path))?;
         file.write(
             serde_yaml::to_string(
                 &boxers.values()
