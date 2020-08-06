@@ -101,7 +101,8 @@ impl Boxer {
     pub fn get_bout_scores<'a>(&'a self, api: &mut BoxRecAPI, opponent: &'a Boxer) -> Result<Matchup<'a>, Box<dyn Error>> {
         let bout_page = api.get_bout_page(&self.id, &opponent.get_name())?;
         let table_row_selector = Selector::parse(".responseLessDataTable").unwrap();
-        let float_regex = Regex::new(r"[0-9]+\.[0-9]+").unwrap();
+        // Floats below 1 are written as .086 (of course they are), hence the * for the first number
+        let float_regex = Regex::new(r"[0-9]*\.[0-9]+").unwrap();
 
         for row in bout_page.select(&table_row_selector) {
             let raw_html = row.html();
@@ -109,7 +110,8 @@ impl Boxer {
                 let mut scores = float_regex.find_iter(&raw_html)
                     .filter_map(|m| -> Option<f32> {
                         // Take the snip identified by the regex
-                        raw_html[m.start()..m.end()]
+                        // Always add a zero to the start, just in case
+                        format!("0{}", raw_html[m.start()..m.end()])
                             // Parse it as a float
                             .parse::<f32>()
                             // And convert it to an option so the filter_map drops all the bad ones
