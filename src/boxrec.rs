@@ -29,7 +29,7 @@ impl Login {
                 match &config.password {
                     Some(pwd) => password = pwd.clone(),
                     None => password = Login::take_from_user("Enter password: ")?,
-                }
+                };
             },
             None => {
                 username = Login::take_from_user("Enter username: ")?;
@@ -76,11 +76,13 @@ impl BoxRecAPI {
 
     // Returns a reference to self to allow for chaining
     fn wait_if_needed(&mut self) -> &Self {
-        // Calculate the time until we're okay to make the next request
-        let time_until_ok = SystemTime::now().duration_since(self.last_sent).unwrap() - self.request_delay;
+        let time_since_request = SystemTime::now()
+            .duration_since(self.last_sent)
+            .unwrap();
         // If we need to wait, do
-        if time_until_ok.as_millis() > 0 {
-            sleep(time_until_ok);
+        if time_since_request.lt(&self.request_delay) {
+            // Calculate the time until we're okay to make the next request, and sleep for that time
+            sleep(self.request_delay.sub(time_since_request));
         }
         // Update last sent time
         self.last_sent = SystemTime::now();
