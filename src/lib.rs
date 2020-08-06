@@ -196,17 +196,27 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                 _ => return Err(e.into()),
             }
         };
+
         // Read pre-existing boxers cache if present and in a good format
         match fs::read_to_string(format!("{}/boxers.yml", cache_path)) {
             Ok(serialised) => serde_yaml::from_str::<Vec<Boxer>>(&serialised)?
-                    .iter()
-                    .for_each(|b| { boxers.insert(b.get_name(), b.to_owned()); }),
+                    .into_iter()
+                    .for_each(|b| { boxers.insert(b.get_name(), b); }),
             Err(err) => match err.kind() {
                 ErrorKind::NotFound => {},
                 _ => return Err(err.into()),
             },
         };
         //println!("Read from disk cache into runtime index:\n{:#?}", boxers);
+
+        // Read pre-existing bouts cache if present and in a good format
+        match fs::read_to_string(format!("{}/bouts.yml", cache_path)) {
+            Ok(serialised) => serde_yaml::from_str::<Vec<BoutMetadata>>(&serialised)?,
+            Err(err) => match err.kind() {
+                ErrorKind::NotFound => {},
+                _ => return Err(err.into()),
+            },
+        };
     }
 
     for bout in bouts.iter() {
