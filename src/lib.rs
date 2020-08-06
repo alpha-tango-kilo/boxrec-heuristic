@@ -220,90 +220,34 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     }
 
     for bout in bouts.iter() {
-        /*
-        I probably should document this abomination
-        Basically, Rust won't let you insert into a map while a reference is held
-        The premise of the below therefore is to test the waters first - check if the two boxers are contained, then make sure to create and add any that aren't in the map before getting references for them
-         */
-        // To start, we're matching against a bool tuple of whether each boxer is already known
-        let (fighter_one, fighter_two) = match (
-            boxers.contains_key(&bout.fighter_one),
-            boxers.contains_key(&bout.fighter_two))
-        {
-            // If both are known, no insertions need to happen, we chill
-            (true, true) => (boxers.get(&bout.fighter_one).unwrap(),
-                             boxers.get(&bout.fighter_two).unwrap()),
-            // If one is unknown
-            (true, false) => {
-                // Try and create the unknown one
-                match Boxer::new_by_name(&mut boxrec, &bout.fighter_two) {
-                    // If it works
-                    Some(f2) => {
-                        // Insert it into the map
-                        boxers.insert(bout.fighter_two.to_string(), f2);
-                        // Then get both references
-                        (boxers.get(&bout.fighter_one).unwrap(),
-                         boxers.get(&bout.fighter_two).unwrap())
-                    },
-                    // If it doesn't work, skip this bout
-                    None => {
-                        bout_metadata.push(BoutMetadata {
-                            bout: bout.clone(),
-                            status: BoutStatus::MissingBoxers,
-                        });
-                        continue;
-                    },
-                }
-            },
-            // Same case as above, but other boxer is unknown
-            (false, true) => {
-                match Boxer::new_by_name(&mut boxrec, &bout.fighter_one) {
-                    Some(f1) => {
-                        boxers.insert(bout.fighter_one.to_string(), f1);
-                        (boxers.get(&bout.fighter_one).unwrap(),
-                         boxers.get(&bout.fighter_two).unwrap())
-                    },
-                    None => {
-                        bout_metadata.push(BoutMetadata {
-                            bout: bout.clone(),
-                            status: BoutStatus::MissingBoxers,
-                        });
-                        continue;
-                    },
-                }
-            },
-            // If neither boxer is known
-            (false, false) => {
-                // Try and make the first
-                match Boxer::new_by_name(&mut boxrec, &bout.fighter_one) {
-                    // If it worked, insert
-                    Some(f1) => boxers.insert(bout.fighter_one.to_string(), f1),
-                    // Skip this bout otherwise
-                    None => {
-                        bout_metadata.push(BoutMetadata {
-                            bout: bout.clone(),
-                            status: BoutStatus::MissingBoxers,
-                        });
-                        continue;
-                    },
-                };
-                match Boxer::new_by_name(&mut boxrec, &bout.fighter_two) {
-                    // If it worked, insert
-                    Some(f2) => boxers.insert(bout.fighter_two.to_string(), f2),
-                    // Skip this bout if it didn't (at least we still have one more dude documented)
-                    None => {
-                        bout_metadata.push(BoutMetadata {
-                            bout: bout.clone(),
-                            status: BoutStatus::MissingBoxers,
-                        });
-                        continue;
-                    },
-                };
-                // Get both references
-                (boxers.get(&bout.fighter_one).unwrap(),
-                 boxers.get(&bout.fighter_two).unwrap())
-            },
-        };
+        if !boxers.contains_key(&bout.fighter_one) {
+            match Boxer::new_by_name(&mut boxrec, &bout.fighter_one) {
+                Some(f1) => boxers.insert(bout.fighter_one.to_string(), f1),
+                // If it doesn't work, skip this bout
+                None => {
+                    bout_metadata.push(BoutMetadata {
+                        bout: bout.clone(),
+                        status: BoutStatus::MissingBoxers,
+                    });
+                    continue;
+                },
+            };
+        }
+        if !boxers.contains_key(&bout.fighter_two) {
+            match Boxer::new_by_name(&mut boxrec, &bout.fighter_two) {
+                // If it works
+                Some(f2) => boxers.insert(bout.fighter_two.to_string(), f2),
+                None => {
+                    bout_metadata.push(BoutMetadata {
+                        bout: bout.clone(),
+                        status: BoutStatus::MissingBoxers,
+                    });
+                    continue;
+                },
+            };
+        }
+        let fighter_one = boxers.get(&bout.fighter_one).unwrap();
+        let fighter_two = boxers.get(&bout.fighter_two).unwrap();
 
         let boxrec_odds = match fighter_one.get_bout_scores(&mut boxrec, &fighter_two) {
             Ok(m) => m,
