@@ -111,7 +111,7 @@ impl Boxer {
                     .filter_map(|m| -> Option<f32> {
                         // Take the snip identified by the regex
                         // Always add a zero to the start, just in case
-                        format!("0{}", raw_html[m.start()..m.end()])
+                        format!("0{}", &raw_html[m.start()..m.end()])
                             // Parse it as a float
                             .parse::<f32>()
                             // And convert it to an option so the filter_map drops all the bad ones
