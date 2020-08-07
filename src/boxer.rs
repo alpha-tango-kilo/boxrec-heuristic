@@ -20,7 +20,7 @@ pub struct Matchup<'a> {
 
 impl<'a> Matchup<'a> {
     fn new(fighter_one: &'a Boxer, fighter_one_score: f32, fighter_two: &'a Boxer, fighter_two_score: f32) -> Matchup<'a> {
-        let win_percent_one = fighter_one_score / fighter_one_score * 100f32;
+        let win_percent_one = fighter_one_score / (fighter_one_score + fighter_two_score) * 100f32;
         Matchup {
             fighter_one,
             fighter_two,

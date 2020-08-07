@@ -86,7 +86,9 @@ impl Odds {
 
     // Used to show bookie's perceived odds
     pub fn as_percent(&self) -> f32 {
-        100f32 * (1f32 - self.top as f32 / self.bottom as f32)
+        let top = self.top as f32;
+        let bot = self.bottom as f32;
+        100f32 * (bot / (top + bot))
     }
 
     // Used to calculate return (profit + stake)
