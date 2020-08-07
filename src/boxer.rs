@@ -135,13 +135,13 @@ impl Display for Boxer {
     }
 }
 
-fn split_name(name: &str) -> Result<(String, String), &'static str> {
+fn split_name(name: &str) -> Result<(String, String), String> {
     // Takes first word as forename and the rest as surname
     match name.find(" ") {
         Some(index) => Ok((
             String::from(name[..index].trim()),
             String::from(name[index..].trim()),
         )),
-        None => Err("Malformed name: no spaces")
+        None => Err(format!("Malformed name, no spaces in \"{}\"", name))
     }
 }
