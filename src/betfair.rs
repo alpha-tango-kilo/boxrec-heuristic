@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::fmt::{self, Display};
 
 use reqwest::blocking::Client;
 use scraper::{ElementRef, Html, Selector};
@@ -11,11 +12,23 @@ pub struct Bout {
     pub odds: BoutOdds,
 }
 
+impl Display for Bout {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} vs. {} ({})", self.fighter_one, self.fighter_two, self.odds)
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub struct BoutOdds {
     pub one_wins: Odds,
     pub draw: Odds,
     pub two_wins: Odds,
+}
+
+impl Display for BoutOdds {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "1: {}, X: {}, 2: {}", self.one_wins, self.draw, self.two_wins)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
@@ -79,6 +92,12 @@ impl Odds {
     // Used to calculate return (profit + stake)
     pub fn as_decimal(&self) -> f32 {
         1f32 + self.top as f32 / self.bottom as f32
+    }
+}
+
+impl Display for Odds {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_frac())
     }
 }
 
