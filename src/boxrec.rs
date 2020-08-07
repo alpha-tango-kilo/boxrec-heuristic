@@ -5,7 +5,7 @@ use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
 use regex::Regex;
-use reqwest::blocking::{Client, RequestBuilder, Response};
+use reqwest::blocking::{Client, RequestBuilder};
 use scraper::{Html, Selector};
 use trim_in_place::TrimInPlace;
 
@@ -100,10 +100,35 @@ impl BoxRecAPI {
         }
     }
 
+    fn try_request_and_unwrap(&mut self, req: &RequestBuilder) -> Result<String, Box<dyn Error>> {
+        loop {
+            self.wait_if_needed();
+            let response = req.try_clone().ok_or("Failed to clone request")?.send()?;
+            if response.url().as_str().contains("login") {
+                eprintln!("Logged out by BoxRec, attempting to login");
+                self.login()?;
+            } else {
+                let text = response.text()?;
+                if text.contains("Please complete the form below to continue...") {
+                    println!("BoxRec is prompting for a reCAPTCHA\n\
+                    Please visit the website and complete one under the login used \
+                    by this program");
+                    loop {
+                        if take_from_user("Once done, type 'go': ")?.to_lowercase() == "go" {
+                            break;
+                        }
+                    }
+                } else {
+                    return Ok(text);
+                }
+            }
+        }
+    }
+
     pub fn get_boxer_page_by_id(&mut self, id: &u32) -> Result<Html, Box<dyn Error>> {
         let url = format!("https://boxrec.com/en/proboxer/{}", id);
-        let response = self.wait_if_needed().reqwest_client.get(&url).send()?;
-        Ok(Html::parse_document(unwrap_response(response)?.as_str()))
+        let response = self.try_request_and_unwrap(&self.reqwest_client.get(&url))?;
+        Ok(Html::parse_document(&response))
     }
 
     pub fn boxer_search(&mut self, forename: &str, surname: &str, active_only: bool) -> Result<u32, Box<dyn Error>> {
@@ -116,10 +141,9 @@ impl BoxRecAPI {
             surname,
             if active_only { "a" } else { "" }
         );
-        let response = self.wait_if_needed().reqwest_client.get(&url).send()?;
+        let response = self.try_request_and_unwrap(&self.reqwest_client.get(&url))?;
 
         // Step 2: parse results
-        let response = unwrap_response(response)?;
         let response = Html::parse_document(&response);
         let selector = Selector::parse("a.personLink").unwrap();
         let mut results = response.select(&selector).peekable();
@@ -216,10 +240,7 @@ impl BoxRecAPI {
                     println!("Found matching bout");
                     // Once a matching bout has been found, download the page
                     let url = format!("https://boxrec.com{}", link.as_str());
-                    let bout_page = self.wait_if_needed().reqwest_client
-                        .get(&url)
-                        .send()?
-                        .text()?;
+                    let bout_page = self.try_request_and_unwrap(&self.reqwest_client.get(&url))?;
                     // Pass onto the next stage
                     return Ok(Html::parse_document(&bout_page));
                 },
@@ -228,19 +249,6 @@ impl BoxRecAPI {
         }
         // If nothing is found after going through all the scheduled entries, say we couldn't find any
         Err("Unable to find any bouts matching search criteria".into())
-    }
-}
-
-fn unwrap_response(response: Response) -> Result<String, Box<dyn Error>> {
-    if response.url().as_str().contains("login") {
-        Err("Logged out by BoxRec".into())
-    } else {
-        let text = response.text()?;
-        if text.contains("Please complete the form below to continue...") {
-            Err("Being prompted for reCAPTCHA".into())
-        } else {
-            Ok(text)
-        }
     }
 }
 
