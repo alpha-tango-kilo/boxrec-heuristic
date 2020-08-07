@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::error::Error;
 use std::io::{self, Write};
 use std::ops::Sub;
@@ -6,7 +5,7 @@ use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
 use regex::Regex;
-use reqwest::blocking::{Client, Response};
+use reqwest::blocking::{Client, RequestBuilder, Response};
 use scraper::{Html, Selector};
 use trim_in_place::TrimInPlace;
 
@@ -19,7 +18,7 @@ struct Login {
 
 impl Login {
     // Maybe find some way to do this without cloning?
-    fn get(config: &Config) -> Result<Login, Box<dyn Error>> {
+    fn get_from_config(config: &Config) -> Result<Login, Box<dyn Error>> {
         let username;
         let password;
 
@@ -28,29 +27,17 @@ impl Login {
                 username = name.clone();
                 match &config.password {
                     Some(pwd) => password = pwd.clone(),
-                    None => password = Login::take_from_user("Enter password: ")?,
+                    None => password = take_from_user("Enter password: ")?,
                 };
             },
             None => {
-                username = Login::take_from_user("Enter username: ")?;
+                username = take_from_user("Enter username: ")?;
                 // If username not specified, then always take password
-                password = Login::take_from_user("Enter password: ")?;
+                password = take_from_user("Enter password: ")?;
             },
         };
 
         Ok(Login { username, password })
-    }
-
-    fn take_from_user(prompt: &str) -> Result<String, Box<dyn Error>> {
-        let mut input = String::new();
-        print!("{}", prompt);
-        // ensures the prompt is actually printed, as Rust usually only flushes on newline
-        io::stdout().flush()?;
-        io::stdin()
-            .read_line(&mut input)?;
-        // I actually had to get a crate for this...
-        input.trim_in_place();
-        Ok(input)
     }
 }
 
@@ -58,12 +45,13 @@ pub struct BoxRecAPI {
     reqwest_client: Client,
     request_delay: Duration,
     last_sent: SystemTime,
+    login: Login,
 }
 
 impl BoxRecAPI {
-    pub fn new(request_delay: u64) -> Result<BoxRecAPI, reqwest::Error> {
+    pub fn new(config: &Config) -> Result<BoxRecAPI, Box<dyn Error>> {
         // Basic synchronous client with cookies enabled
-        let request_delay = Duration::from_millis(request_delay);
+        let request_delay = Duration::from_millis(config.get_request_delay());
         Ok(BoxRecAPI {
             reqwest_client:
                 Client::builder()
@@ -71,6 +59,7 @@ impl BoxRecAPI {
                     .build()?,
             request_delay,
             last_sent: SystemTime::now().sub(request_delay),
+            login: Login::get_from_config(config)?,
         })
     }
 
@@ -89,20 +78,17 @@ impl BoxRecAPI {
         self
     }
 
-    pub fn login(&mut self, config: &Config) -> Result<(), Box<dyn Error>> {
-        let login = Login::get(config)?;
-
-        let mut form_data = HashMap::new();
-        form_data.insert("_username", login.username.as_str());
-        form_data.insert("_password", login.password.as_str());
-        form_data.insert("_remember_me", "on");
-        form_data.insert("login[go]", "");
-
+    pub fn login(&mut self) -> Result<(), Box<dyn Error>> {
         println!("Sending login request");
 
         let response = self.wait_if_needed().reqwest_client
             .post("https://boxrec.com/en/login")
-            .form(&form_data)
+            .form::<[(&str, &str); 4]>(&[
+                ("_username", &self.login.username),
+                ("_password", &self.login.password),
+                ("_remember_me", "on"),
+                ("login[go]", ""),
+            ])
             .send()?;
 
         // If login is successful, you are redirected to the home page instead of the login page
@@ -256,4 +242,16 @@ fn unwrap_response(response: Response) -> Result<String, Box<dyn Error>> {
             Ok(text)
         }
     }
+}
+
+fn take_from_user(prompt: &str) -> Result<String, Box<dyn Error>> {
+    let mut input = String::new();
+    print!("{}", prompt);
+    // ensures the prompt is actually printed, as Rust usually only flushes on newline
+    io::stdout().flush()?;
+    io::stdin()
+        .read_line(&mut input)?;
+    // I actually had to get a crate for this...
+    input.trim_in_place();
+    Ok(input)
 }

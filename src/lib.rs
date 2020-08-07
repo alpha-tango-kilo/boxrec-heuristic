@@ -73,14 +73,14 @@ impl Config {
         }
     }
 
-    fn get_request_timeout(&self) -> u64 {
+    pub fn get_request_delay(&self) -> u64 {
         match &self.request_timeout {
             Some(ms) => *ms,
             None => Config::new_default().request_timeout.unwrap(),
         }
     }
 
-    fn get_notify_threshold(&self) -> f32 {
+    pub fn get_notify_threshold(&self) -> f32 {
         match &self.notify_threshold {
             Some(percent) => *percent,
             None => Config::new_default().notify_threshold.unwrap(),
@@ -173,8 +173,8 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let config = Config::new(CONFIG_PATH);
 
     // Connect to BoxRec
-    let mut boxrec = BoxRecAPI::new(config.get_request_timeout())?;
-    boxrec.login(&config)?;
+    let mut boxrec = BoxRecAPI::new(&config)?;
+    boxrec.login()?;
 
     // Connect to Betfair
     let betfair = BetfairAPI::new()?;
