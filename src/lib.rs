@@ -110,12 +110,14 @@ enum BoutStatus {
 
 impl BoutStatus {
     fn next(&mut self) {
-        &mut match self {
+        //print!("Advancing status from '{}'", self);
+        *self = match self {
             BoutStatus::MissingBoxers => BoutStatus::MissingBoutPage,
             BoutStatus::MissingBoutPage => BoutStatus::Checked,
             BoutStatus::Checked => BoutStatus::Announced,
             BoutStatus::Announced => panic!("No next status (called on BoutStatus::Announced)"),
         };
+        //println!(" to '{}'", self);
     }
 }
 
