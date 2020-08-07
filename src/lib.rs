@@ -51,7 +51,7 @@ impl Config {
             cache_path: Some(String::from("./.cache")), // Cache by default
             username: None,
             password: None,
-            request_timeout: Some(0),
+            request_timeout: Some(500u64),
             notify_threshold: Some(15f32),
         }
     }
@@ -133,6 +133,12 @@ impl Display for BoutStatus {
 }
 
 fn compare_and_notify(matchup: &Matchup, bout: &Bout, threshold: &f32) -> BoutStatus {
+    /*println!("Ours: {}%\tBetfair's:{}%\nOurs: {}%\tBetfair's:{}%",
+             matchup.win_percent_one,
+             bout.odds.one_wins.as_percent(),
+             matchup.win_percent_two,
+             bout.odds.two_wins.as_percent(),
+    );*/
     if matchup.win_percent_one - bout.odds.one_wins.as_percent() > *threshold {
         pretty_print_notification(
             &matchup.fighter_one.get_name(),
@@ -157,10 +163,10 @@ fn compare_and_notify(matchup: &Matchup, bout: &Bout, threshold: &f32) -> BoutSt
 }
 
 fn pretty_print_notification(winner_to_be: &str, win_percent: &f32, loser_to_be: &str, odds: &str, warning: &bool) {
-    println!("---\
-{}We might be onto something chief!\n
-BoxRec shows {} as having a {}% chance of winning against {}, and yet the betting odds are {}\n
----",
+    println!("---\n{}\
+    We might be onto something chief!\n\
+    BoxRec shows {} as having a {}% chance of winning against {}, and yet the betting odds are {}\n\
+    ---",
              if *warning { "[WARNING: both boxer's have a BoxRec score below the safe threshold]\n" } else { "" },
              winner_to_be,
              win_percent,
