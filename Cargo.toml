@@ -1,6 +1,6 @@
 [package]
 name = "boxrec_tool"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["alpha-kilo-tango <atk@aaathats3as.com>"]
 edition = "2018"
 
