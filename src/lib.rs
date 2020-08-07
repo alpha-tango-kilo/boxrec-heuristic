@@ -88,13 +88,19 @@ impl Config {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-struct BoutMetadata {
-    bout: Bout, // TODO: Maybe take a reference so memory usage isn't as ass?
-    status: BoutStatus,
+#[derive(Serialize, Deserialize, Clone)]
+struct BoutMetadata (
+    Bout, // TODO: Maybe take a reference so memory usage isn't as ass?
+    BoutStatus,
+);
+
+impl PartialEq for BoutMetadata {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
 enum BoutStatus {
     MissingBoxers,
     MissingBoutPage,
@@ -103,13 +109,13 @@ enum BoutStatus {
 }
 
 impl BoutStatus {
-    fn next(self) -> Result<Self, &'static str> {
-        match self {
-            BoutStatus::MissingBoxers => Ok(BoutStatus::MissingBoutPage),
-            BoutStatus::MissingBoutPage => Ok(BoutStatus::Checked),
-            BoutStatus::Checked => Ok(BoutStatus::Announced),
-            BoutStatus::Announced => Err("No next status"),
-        }
+    fn next(&mut self) {
+        &mut match self {
+            BoutStatus::MissingBoxers => BoutStatus::MissingBoutPage,
+            BoutStatus::MissingBoutPage => BoutStatus::Checked,
+            BoutStatus::Checked => BoutStatus::Announced,
+            BoutStatus::Announced => panic!("No next status (called on BoutStatus::Announced)"),
+        };
     }
 }
 
@@ -150,9 +156,9 @@ fn compare_and_notify(matchup: &Matchup, bout: &Bout, threshold: &f32) -> BoutSt
 
 fn pretty_print_notification(winner_to_be: &str, win_percent: &f32, loser_to_be: &str, odds: &str, warning: &bool) {
     println!("---\
-        {}We might be onto something chief!\
-        BoxRec shows {} as having a {}% chance of winning against {}, and yet the betting odds are {}\
-        ---",
+{}We might be onto something chief!\n
+BoxRec shows {} as having a {}% chance of winning against {}, and yet the betting odds are {}\n
+---",
              if *warning { "[WARNING: both boxer's have a BoxRec score below the safe threshold]\n" } else { "" },
              winner_to_be,
              win_percent,
@@ -219,57 +225,57 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         };
     }
 
-    for bout in bouts.iter() {
-        if !boxers.contains_key(&bout.fighter_one) {
-            match Boxer::new_by_name(&mut boxrec, &bout.fighter_one) {
-                Some(f1) => boxers.insert(bout.fighter_one.to_string(), f1),
-                // If it doesn't work, skip this bout
-                None => {
-                    bout_metadata.push(BoutMetadata {
-                        bout: bout.clone(),
-                        status: BoutStatus::MissingBoxers,
-                    });
-                    continue;
-                },
-            };
-        }
-        if !boxers.contains_key(&bout.fighter_two) {
-            match Boxer::new_by_name(&mut boxrec, &bout.fighter_two) {
-                // If it works
-                Some(f2) => boxers.insert(bout.fighter_two.to_string(), f2),
-                None => {
-                    bout_metadata.push(BoutMetadata {
-                        bout: bout.clone(),
-                        status: BoutStatus::MissingBoxers,
-                    });
-                    continue;
-                },
-            };
-        }
-        let fighter_one = boxers.get(&bout.fighter_one).unwrap();
-        let fighter_two = boxers.get(&bout.fighter_two).unwrap();
-
-        let boxrec_odds = match fighter_one.get_bout_scores(&mut boxrec, &fighter_two) {
-            Ok(m) => m,
-            Err(err) => {
-                eprintln!("Failed to get matchup between {} & {} (Error: {})",
-                          fighter_one.get_name(),
-                          fighter_two.get_name(),
-                          err);
-                bout_metadata.push(BoutMetadata {
-                    bout: bout.clone(),
-                    status: BoutStatus::MissingBoutPage,
-                });
-                continue;
-            },
-        };
-
-        bout_metadata.push(BoutMetadata {
-            bout: bout.clone(),
-            status: compare_and_notify(&boxrec_odds,
-                                       bout,
-                                       &config.get_notify_threshold())
+    bouts.into_iter()
+        .for_each(|bout| {
+            let bout = BoutMetadata(bout, BoutStatus::MissingBoxers);
+            if !bout_metadata.contains(&bout) { bout_metadata.push(bout); }
         });
+
+    for BoutMetadata(bout, status) in bout_metadata.iter_mut() {
+        // Step 1: Get boxers
+        if status == &BoutStatus::MissingBoxers {
+            // If we don't have fighter one
+            let mut have_one = true;
+            let mut have_two = true;
+            if !boxers.contains_key(&bout.fighter_one) {
+                // Look them up with BoxRec
+                if let Some(f1) = Boxer::new_by_name(&mut boxrec, &bout.fighter_one) {
+                    // Insert them into the index if present
+                    boxers.insert(bout.fighter_one.to_string(), f1);
+                } else {
+                    have_one = false;
+                }
+            }
+            // If we don't have fighter two, same process as one
+            if !boxers.contains_key(&bout.fighter_two) {
+                if let Some(f2) = Boxer::new_by_name(&mut boxrec, &bout.fighter_two) {
+                    boxers.insert(bout.fighter_two.to_string(), f2);
+                } else {
+                    have_two = false;
+                }
+            }
+            if have_one && have_two { status.next(); }
+        }
+
+        // Step 2: Get bout between boxers
+        if status == &BoutStatus::MissingBoutPage {
+            let fighter_one = boxers.get(&bout.fighter_one).unwrap();
+            let fighter_two = boxers.get(&bout.fighter_two).unwrap();
+
+            let boxrec_odds = match fighter_one.get_bout_scores(&mut boxrec, &fighter_two) {
+                Ok(m) => m,
+                Err(err) => {
+                    eprintln!("Failed to get bout between {} & {} (Error: {})",
+                              fighter_one.get_name(),
+                              fighter_two.get_name(),
+                              err);
+                    continue;
+                },
+            };
+            status.next();
+
+            compare_and_notify(&boxrec_odds, bout, &config.get_notify_threshold());
+        }
     }
 
     // Save disk cache after running
