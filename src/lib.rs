@@ -31,8 +31,20 @@ pub struct Config {
 impl Config {
     fn new(path: &str) -> Config {
         match fs::read_to_string(path) {
-            Ok(contents) => match serde_yaml::from_str(contents.as_str()) {
-                Ok(config) => config,
+            Ok(contents) => match serde_yaml::from_str::<Config>(contents.as_str()) {
+                Ok(config) => {
+                    // Validate numbers
+                    if let Some(percent) = config.notify_threshold {
+                        if percent > 0f32 && percent < 100f32 {
+                            config
+                        } else {
+                            eprintln!("Config had bad notify_threshold, using default configuration (Read: {})", percent);
+                            Config::new_default()
+                        }
+                    } else {
+                        config
+                    }
+                },
                 Err(err) => {
                     eprintln!("Failed to parse config file, using default (Error: {})", err);
                     Config::new_default()
