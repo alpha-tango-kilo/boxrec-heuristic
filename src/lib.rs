@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::collections::HashMap;
+use std::env;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::fs::{self, OpenOptions};
@@ -12,10 +13,12 @@ use boxer::*;
 
 use crate::betfair::{BetfairAPI, Bout};
 use crate::boxrec::BoxRecAPI;
+use crate::discord::Bot;
 
 mod betfair;
 mod boxer;
 mod boxrec;
+mod discord;
 
 const CONFIG_PATH: &str = "./config.yml";
 
@@ -188,6 +191,12 @@ fn pretty_print_notification(winner_to_be: &str, win_percent: &f32, loser_to_be:
 }
 
 pub fn run() -> Result<(), Box<dyn Error>> {
+    // Get the bot going
+    // Token
+    let token = env::var("DISCORD_TOKEN")
+        .expect("Expected token in environment as DISCORD_TOKEN");
+    //let bot = Bot::new(token).await;
+
     // Load config
     // TODO: make this changeable using a flag
     let config = Config::new(CONFIG_PATH);
