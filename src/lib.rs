@@ -190,12 +190,12 @@ fn pretty_print_notification(winner_to_be: &str, win_percent: &f32, loser_to_be:
     );
 }
 
-pub fn run() -> Result<(), Box<dyn Error>> {
+pub async fn run() -> Result<(), Box<dyn Error>> {
     // Get the bot going
     // Token
     let token = env::var("DISCORD_TOKEN")
         .expect("Expected token in environment as DISCORD_TOKEN");
-    //let bot = Bot::new(token).await;
+    let _bot = Bot::new(&token).await;
 
     // Load config
     // TODO: make this changeable using a flag
@@ -217,41 +217,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 
     // Load disk cache before running
     if let Some(cache_path) = &config.cache_path {
-        // Check for and create cache folder
-        match fs::metadata(cache_path) {
-            // If Ok(), it exists
-            // If it's a file, get scared, otherwise, we have a folder!
-            Ok(md) => if md.is_file() {
-                return Err("Cache path points to an existing file".into());
-            },
-            Err(e) => match e.kind() {
-                // If the folder doesn't exist yet, try and make it
-                ErrorKind::NotFound => fs::create_dir_all(cache_path)?,
-                // If there's another error be spooked
-                _ => return Err(e.into()),
-            }
-        };
-
-        // Read pre-existing boxers cache if present and in a good format
-        match fs::read_to_string(format!("{}/boxers.yml", cache_path)) {
-            Ok(serialised) => serde_yaml::from_str::<Vec<Boxer>>(&serialised)?
-                    .into_iter()
-                    .for_each(|b| { boxers.insert(b.get_name(), b); }),
-            Err(err) => match err.kind() {
-                ErrorKind::NotFound => {},
-                _ => return Err(err.into()),
-            },
-        };
-        //println!("Read from disk cache into runtime index:\n{:#?}", boxers);
-
-        // Read pre-existing bouts cache if present and in a good format
-        match fs::read_to_string(format!("{}/bouts.yml", cache_path)) {
-            Ok(serialised) => bout_metadata = serde_yaml::from_str::<Vec<BoutMetadata>>(&serialised)?,
-            Err(err) => match err.kind() {
-                ErrorKind::NotFound => {},
-                _ => return Err(err.into()),
-            },
-        };
+        read_cache(cache_path, &mut boxers, &mut bout_metadata).await?;
     }
 
     bouts.into_iter()
@@ -309,30 +275,75 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 
     // Save disk cache after running
     if let Some(cache_path) = &config.cache_path {
-        let mut boxers_file = OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .open(format!("{}/boxers.yml", cache_path))?;
-        boxers_file.write(
-            serde_yaml::to_string(
-                &boxers.values()
-                    .collect::<Vec<_>>()
-            )?.as_bytes()
-        )?;
-
-        let mut bouts_file = OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .open(format!("{}/bouts.yml", cache_path))?;
-        bouts_file.write(
-            serde_yaml::to_string(
-                &bout_metadata
-            )?.as_bytes()
-        )?;
+        write_cache(cache_path, &boxers, &bout_metadata).await?;
     }
 
     //config.save()?;
+    Ok(())
+}
+
+async fn read_cache(cache_path: &str, boxers: &mut HashMap<String, Boxer>, bout_metadata: &mut Vec<BoutMetadata>) -> Result<(), Box<dyn Error>> {
+    // Check for and create cache folder
+    match fs::metadata(cache_path) {
+        // If Ok(), it exists
+        // If it's a file, get scared, otherwise, we have a folder!
+        Ok(md) => if md.is_file() {
+            return Err("Cache path points to an existing file".into());
+        },
+        Err(e) => match e.kind() {
+            // If the folder doesn't exist yet, try and make it
+            ErrorKind::NotFound => fs::create_dir_all(cache_path)?,
+            // If there's another error be spooked
+            _ => return Err(e.into()),
+        }
+    };
+
+    // Read pre-existing boxers cache if present and in a good format
+    match fs::read_to_string(format!("{}/boxers.yml", cache_path)) {
+        Ok(serialised) => serde_yaml::from_str::<Vec<Boxer>>(&serialised)?
+            .into_iter()
+            .for_each(|b| { boxers.insert(b.get_name(), b); }),
+        Err(err) => match err.kind() {
+            ErrorKind::NotFound => {},
+            _ => return Err(err.into()),
+        },
+    };
+    //println!("Read from disk cache into runtime index:\n{:#?}", boxers);
+
+    // Read pre-existing bouts cache if present and in a good format
+    match fs::read_to_string(format!("{}/bouts.yml", cache_path)) {
+        Ok(serialised) => *bout_metadata = serde_yaml::from_str::<Vec<BoutMetadata>>(&serialised)?,
+        Err(err) => match err.kind() {
+            ErrorKind::NotFound => {},
+            _ => return Err(err.into()),
+        },
+    };
+
+    Ok(())
+}
+
+async fn write_cache(cache_path: &str, boxers: &HashMap<String, Boxer>, bout_metadata: &Vec<BoutMetadata>) -> Result<(), Box<dyn Error>> {
+    let mut boxers_file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .create(true)
+        .open(format!("{}/boxers.yml", cache_path))?;
+    boxers_file.write(
+        serde_yaml::to_string(
+            &boxers.values()
+                .collect::<Vec<_>>()
+        )?.as_bytes()
+    )?;
+
+    let mut bouts_file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .create(true)
+        .open(format!("{}/bouts.yml", cache_path))?;
+    bouts_file.write(
+        serde_yaml::to_string(
+            &bout_metadata
+        )?.as_bytes()
+    )?;
     Ok(())
 }
