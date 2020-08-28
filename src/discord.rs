@@ -21,7 +21,7 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         let activity = Activity::playing("with BoxRec");
         let status = OnlineStatus::Online;
-        ctx.set_presence(Some(activity), status);
+        ctx.set_presence(Some(activity), status).await;
         println!("{} is connected!", ready.user.name);
     }
 }
@@ -49,9 +49,11 @@ impl Bot {
     }
 
     pub async fn notify(&self) {
-        self.notify_channel.iter().for_each(|c| {
-
-        });
+        for c in self.notify_channel.iter() {
+            if let Err(why) = c.say(&self.discord.cache_and_http.http, "Foo").await {
+                eprintln!("Failed to send notification to {} (Error: {}", c, why);
+            }
+        }
     }
 }
 
