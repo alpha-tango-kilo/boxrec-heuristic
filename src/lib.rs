@@ -24,11 +24,12 @@ const CONFIG_PATH: &str = "./config.yml";
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
-    pub cache_path: Option<String>,
-    pub username: Option<String>,
-    pub password: Option<String>,
-    request_timeout: Option<u64>,
-    notify_threshold: Option<f32>,
+    pub cache_path: Option<String>,     // directory path to store cache files
+    pub username: Option<String>,       // username for BoxRec
+    pub password: Option<String>,       // password for BoxRec
+    request_delay: Option<u64>,         // minimum time between BoxRec requests
+    notify_threshold: Option<f32>,      // positive difference in our odds required to get notified
+    recheck_delay: Option<u16>,         // time in minutes between Betfair checks
 }
 
 impl Config {
@@ -37,16 +38,13 @@ impl Config {
             Ok(contents) => match serde_yaml::from_str::<Config>(contents.as_str()) {
                 Ok(config) => {
                     // Validate numbers
-                    if let Some(percent) = config.notify_threshold {
-                        if percent > 0f32 && percent < 100f32 {
-                            config
-                        } else {
+                    if let Some(percent) = &config.notify_threshold {
+                        if percent < &0f32 || percent > &100f32 {
                             eprintln!("Config had bad notify_threshold, using default configuration (Read: {})", percent);
-                            Config::new_default()
+                            return Config::new_default();
                         }
-                    } else {
-                        config
                     }
+                    config
                 },
                 Err(err) => {
                     eprintln!("Failed to parse config file, using default (Error: {})", err);
@@ -66,8 +64,9 @@ impl Config {
             cache_path: Some(String::from("./.cache")), // Cache by default
             username: None,
             password: None,
-            request_timeout: Some(500u64),
+            request_delay: Some(500u64),
             notify_threshold: Some(15f32),
+            recheck_delay: Some(60u16),
         }
     }
 
@@ -89,9 +88,9 @@ impl Config {
     }
 
     pub fn get_request_delay(&self) -> u64 {
-        match &self.request_timeout {
+        match &self.request_delay {
             Some(ms) => *ms,
-            None => Config::new_default().request_timeout.unwrap(),
+            None => Config::new_default().request_delay.unwrap(),
         }
     }
 
