@@ -6,6 +6,7 @@ use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -100,6 +101,10 @@ impl Config {
             None => Config::new_default().notify_threshold.unwrap(),
         }
     }
+
+    fn get_recheck_delay(&self) -> Duration {
+        Duration::from_secs((self.recheck_delay.unwrap() * 60) as u64)
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -191,7 +196,6 @@ fn pretty_print_notification(winner_to_be: &str, win_percent: &f32, loser_to_be:
 
 pub async fn run() -> Result<(), Box<dyn Error>> {
     // Get the bot going
-    // Token
     let token = env::var("DISCORD_TOKEN")
         .expect("Expected token in environment as DISCORD_TOKEN");
     let _bot = Bot::new(&token).await;
@@ -206,9 +210,6 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
 
     // Connect to Betfair
     let betfair = BetfairAPI::new()?;
-    // Scrape Betfair
-    let bouts = betfair.get_listed_bouts()?;
-    //println!("{:#?}", bouts);
 
     // Create Boxer HashMap (runtime cache/index of Boxers by name)
     let mut boxers: HashMap<String, Boxer> = HashMap::new();
@@ -219,65 +220,76 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
         read_cache(cache_path, &mut boxers, &mut bout_metadata).await?;
     }
 
-    bouts.into_iter()
-        .for_each(|bout| {
-            let bout = BoutMetadata(bout, BoutStatus::MissingBoxers);
-            if !bout_metadata.contains(&bout) { bout_metadata.push(bout); }
-        });
+    // Main running loop
+    // Contents of this is run at program start, then every Config.recheck_delay minutes
+    loop {
+        // Scrape Betfair
+        let bouts = betfair.get_listed_bouts()?;
+        //println!("{:#?}", bouts);
 
-    for BoutMetadata(bout, status) in bout_metadata.iter_mut() {
-        // Step 1: Get boxers
-        if status == &BoutStatus::MissingBoxers {
-            // If we don't have fighter one
-            let mut have_one = true;
-            let mut have_two = true;
-            if !boxers.contains_key(&bout.fighter_one) {
-                // Look them up with BoxRec
-                if let Some(f1) = Boxer::new_by_name(&mut boxrec, &bout.fighter_one) {
-                    // Insert them into the index if present
-                    boxers.insert(bout.fighter_one.to_string(), f1);
-                } else {
-                    have_one = false;
+        // Tag all bouts with metadata if they don't already have it
+        bouts.into_iter()
+            .for_each(|bout| {
+                let bout = BoutMetadata(bout, BoutStatus::MissingBoxers);
+                if !bout_metadata.contains(&bout) { bout_metadata.push(bout); }
+            });
+
+        for BoutMetadata(bout, status) in bout_metadata.iter_mut() {
+            // Step 1: Get boxers
+            if status == &BoutStatus::MissingBoxers {
+                let mut have_one = true;
+                let mut have_two = true;
+
+                // If we don't have fighter one
+                if !boxers.contains_key(&bout.fighter_one) {
+                    // Look them up with BoxRec
+                    if let Some(f1) = Boxer::new_by_name(&mut boxrec, &bout.fighter_one) {
+                        // Insert them into the index if present
+                        boxers.insert(bout.fighter_one.to_string(), f1);
+                    } else {
+                        have_one = false;
+                    }
                 }
-            }
-            // If we don't have fighter two, same process as one
-            if !boxers.contains_key(&bout.fighter_two) {
-                if let Some(f2) = Boxer::new_by_name(&mut boxrec, &bout.fighter_two) {
-                    boxers.insert(bout.fighter_two.to_string(), f2);
-                } else {
-                    have_two = false;
+                // If we don't have fighter two, same process as one
+                if !boxers.contains_key(&bout.fighter_two) {
+                    if let Some(f2) = Boxer::new_by_name(&mut boxrec, &bout.fighter_two) {
+                        boxers.insert(bout.fighter_two.to_string(), f2);
+                    } else {
+                        have_two = false;
+                    }
                 }
+                if have_one && have_two { status.next(); }
             }
-            if have_one && have_two { status.next(); }
+
+            // Step 2: Get bout between boxers
+            if status == &BoutStatus::MissingBoutPage {
+                let fighter_one = boxers.get(&bout.fighter_one).unwrap();
+                let fighter_two = boxers.get(&bout.fighter_two).unwrap();
+
+                let boxrec_odds = match fighter_one.get_bout_scores(&mut boxrec, &fighter_two) {
+                    Ok(m) => m,
+                    Err(err) => {
+                        eprintln!("Failed to get bout between {} & {} (Error: {})",
+                                  fighter_one.get_name(),
+                                  fighter_two.get_name(),
+                                  err);
+                        continue;
+                    },
+                };
+                status.next();
+
+                compare_and_notify(&boxrec_odds, bout, &config.get_notify_threshold());
+            }
         }
 
-        // Step 2: Get bout between boxers
-        if status == &BoutStatus::MissingBoutPage {
-            let fighter_one = boxers.get(&bout.fighter_one).unwrap();
-            let fighter_two = boxers.get(&bout.fighter_two).unwrap();
-
-            let boxrec_odds = match fighter_one.get_bout_scores(&mut boxrec, &fighter_two) {
-                Ok(m) => m,
-                Err(err) => {
-                    eprintln!("Failed to get bout between {} & {} (Error: {})",
-                              fighter_one.get_name(),
-                              fighter_two.get_name(),
-                              err);
-                    continue;
-                },
-            };
-            status.next();
-
-            compare_and_notify(&boxrec_odds, bout, &config.get_notify_threshold());
+        // Save disk cache after running
+        if let Some(cache_path) = &config.cache_path {
+            write_cache(cache_path, &boxers, &bout_metadata).await?;
         }
-    }
 
-    // Save disk cache after running
-    if let Some(cache_path) = &config.cache_path {
-        write_cache(cache_path, &boxers, &bout_metadata).await?;
+        // Wait
+        tokio::time::delay_for(config.get_recheck_delay()).await;
     }
-
-    //config.save()?;
     Ok(())
 }
 
