@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use serenity::{
     async_trait,
-    model::{channel::Message, gateway::Ready},
+    model::{channel::Message, gateway::{Activity, Ready}, id::ChannelId, user::OnlineStatus},
     prelude::*,
 };
 
@@ -18,13 +18,17 @@ impl EventHandler for Handler {
         }
     }
 
-    async fn ready(&self, _: Context, ready: Ready) {
+    async fn ready(&self, ctx: Context, ready: Ready) {
+        let activity = Activity::playing("with BoxRec");
+        let status = OnlineStatus::Online;
+        ctx.set_presence(Some(activity), status);
         println!("{} is connected!", ready.user.name);
     }
 }
 
 pub struct Bot {
     discord: Client,
+    notify_channel: Vec<ChannelId>,
 }
 
 impl Bot {
@@ -40,7 +44,14 @@ impl Bot {
 
         Bot {
             discord,
+            notify_channel: vec![],
         }
+    }
+
+    pub async fn notify(&self) {
+        self.notify_channel.iter().for_each(|c| {
+
+        });
     }
 }
 
