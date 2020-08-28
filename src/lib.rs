@@ -198,7 +198,12 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
     // Get the bot going
     let token = env::var("DISCORD_TOKEN")
         .expect("Expected token in environment as DISCORD_TOKEN");
-    let _bot = Bot::new(&token).await;
+    let bot = Bot::new(&token).await?;
+
+    let (res, _) = tokio::join!(bot.start(), bot.notify());
+    res?;
+
+    return Ok(());
 
     // Load config
     // TODO: make this changeable using a flag

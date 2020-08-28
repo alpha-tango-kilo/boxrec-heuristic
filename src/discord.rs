@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::sync::Arc;
 
 use serenity::{
@@ -32,32 +33,36 @@ impl EventHandler for Handler {
 }
 
 pub struct Bot {
-    discord: Client,
+    discord: Mutex<Client>,
     notify_channels: Arc<Mutex<Vec<ChannelId>>>,
 }
 
 impl Bot {
-    pub async fn new(token: &str) -> Self {
+    pub async fn new(token: &str) -> Result<Self, Box<dyn Error>> {
         let notify_channels = Arc::new(Mutex::new(vec![]));
-        let mut discord = Client::new(token)
+        let discord = Client::new(token)
             .event_handler(Handler { notify_channels: notify_channels.clone() })
-            .await
-            .expect("Error building client");
+            .await?;
 
-        if let Err(err) = discord.start().await {
-            println!("Bot error ({})", err);
-        }
-
-        Bot {
-            discord,
+        Ok(Bot {
+            discord: Mutex::new(discord),
             notify_channels,
-        }
+        })
+    }
+
+    pub async fn start(&self) -> Result<(), Box<dyn Error>> {
+        Ok(self.discord.lock().await.start().await?)
     }
 
     pub async fn notify(&self) {
+        println!("Waiting!");
+        tokio::time::delay_for(std::time::Duration::from_secs(30)).await;
         println!("Notifying!");
-        for c in self.notify_channels.lock().await.iter() {
-            if let Err(why) = c.say(&self.discord.cache_and_http.http, "Foo").await {
+        let discord = self.discord.lock().await;
+        let cs = self.notify_channels.lock().await;
+        println!("{:?}", *cs);
+        for c in cs.iter() {
+            if let Err(why) = c.say(&discord.cache_and_http.http, "Foo").await {
                 eprintln!("Failed to send notification to {} (Error: {}", c, why);
             } else {
                 println!("Notification sent to {}", c);
