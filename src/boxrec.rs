@@ -44,14 +44,14 @@ impl Login {
 pub struct BoxRecAPI {
     reqwest_client: Client,
     request_delay: Duration,
-    last_sent: SystemTime,
+    last_sent: SystemTime, // TODO: RefCell/Mutex?
     login: Login,
 }
 
 impl BoxRecAPI {
     pub fn new(config: &Config) -> Result<BoxRecAPI, Box<dyn Error>> {
         // Basic synchronous client with cookies enabled
-        let request_delay = Duration::from_millis(config.get_request_delay());
+        let request_delay = config.get_request_delay();
         Ok(BoxRecAPI {
             reqwest_client:
                 Client::builder()
@@ -234,17 +234,16 @@ impl BoxRecAPI {
         for upcoming_fight in scheduled_fights {
             let upcoming_fight = upcoming_fight.html();
             // Check if a URL is found first, this isn't guaranteed
-            match bout_link_regex.find(&upcoming_fight) {
+            if let Some(link) = bout_link_regex.find(&upcoming_fight) {
                 // If a URL is found, check that this entry is for the correct opponent
-                Some(link) => if upcoming_fight.to_lowercase().contains(&name_2) {
+                if upcoming_fight.to_lowercase().contains(&name_2) {
                     println!("Found matching bout");
                     // Once a matching bout has been found, download the page
                     let url = format!("https://boxrec.com{}", link.as_str());
                     let bout_page = self.try_request_and_unwrap(&self.reqwest_client.get(&url))?;
                     // Pass onto the next stage
                     return Ok(Html::parse_document(&bout_page));
-                },
-                None => {},
+                }
             }
         }
         // If nothing is found after going through all the scheduled entries, say we couldn't find any

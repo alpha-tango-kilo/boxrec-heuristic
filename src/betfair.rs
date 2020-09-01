@@ -112,7 +112,7 @@ impl BetfairAPI {
         // Synchronous client, no cookies
         Ok(BetfairAPI {
             reqwest_client:
-                Client::builder().build()?
+                Client::builder().build()?,
         })
     }
 
@@ -130,8 +130,7 @@ impl BetfairAPI {
         Ok(
             page.select(&bout_selector)
                 .filter_map(|er| -> Option<Bout> {
-                    let odds = get_bout_odds(&er);
-                    match odds {
+                    match get_bout_odds(&er) {
                         Ok(odds) => {
                             match get_bout_names(&er) {
                                 Ok((fighter_one, fighter_two)) => Some(Bout { fighter_one, fighter_two, odds }),
@@ -155,11 +154,7 @@ impl BetfairAPI {
 fn get_bout_names(fragment: &ElementRef) -> Result<(String, String), Box<dyn Error>> {
     let name_selector = Selector::parse(".team-name").unwrap();
     let mut names = fragment.select(&name_selector)
-        .map(|er2| -> String {
-            String::from(
-                er2.inner_html().trim()
-            )
-        });
+        .map(|er2| -> String { String::from(er2.inner_html().trim()) });
 
     Ok((
         names.next().ok_or("First fighter's name not found")?,

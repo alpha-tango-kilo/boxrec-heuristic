@@ -33,9 +33,9 @@ impl<'a> Matchup<'a> {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Boxer {
-    id: u32,
-    forename: String,
-    surname: String,
+    pub id: u32,
+    pub forename: String,
+    pub surname: String,
 }
 
 impl Boxer {
@@ -69,7 +69,7 @@ impl Boxer {
             },
         };
 
-        let title_tag_selector: Selector = Selector::parse("title").unwrap();
+        let title_tag_selector = Selector::parse("title").unwrap();
 
         match page
             // Find title tag(s)
@@ -95,8 +95,6 @@ impl Boxer {
     }
 
     pub fn get_name(&self) -> String { format!("{} {}", self.forename, self.surname) }
-
-    pub fn get_id(&self) -> &u32 { &self.id }
 
     pub fn get_bout_scores<'a>(&'a self, api: &mut BoxRecAPI, opponent: &'a Boxer) -> Result<Matchup<'a>, Box<dyn Error>> {
         let bout_page = api.get_bout_page(&self.id, &opponent.get_name())?;

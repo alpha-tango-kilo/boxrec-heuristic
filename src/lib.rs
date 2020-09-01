@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use BoutStatus::*;
 use boxer::*;
 
 use crate::betfair::{BetfairAPI, Bout};
@@ -41,7 +42,7 @@ impl Config {
                     // Validate numbers
                     if let Some(percent) = &config.notify_threshold {
                         if percent < &0f32 || percent > &100f32 {
-                            eprintln!("Config had bad notify_threshold, using default configuration (Read: {})", percent);
+                            eprintln!("Config had bad notify_threshold, using default configuration (Read: {}%)", percent);
                             return Config::new_default();
                         }
                     }
@@ -88,16 +89,17 @@ impl Config {
         }
     }
 
-    pub fn get_request_delay(&self) -> u64 {
-        match &self.request_delay {
-            Some(ms) => *ms,
+    pub fn get_request_delay(&self) -> Duration {
+        let ms = match self.request_delay {
+            Some(ms) => ms,
             None => Config::new_default().request_delay.unwrap(),
-        }
+        };
+        Duration::from_millis(ms)
     }
 
     pub fn get_notify_threshold(&self) -> f32 {
-        match &self.notify_threshold {
-            Some(percent) => *percent,
+        match self.notify_threshold {
+            Some(percent) => percent,
             None => Config::new_default().notify_threshold.unwrap(),
         }
     }
@@ -133,14 +135,12 @@ enum BoutStatus {
 
 impl BoutStatus {
     fn next(&mut self) {
-        //print!("Advancing status from '{}'", self);
         *self = match self {
-            BoutStatus::MissingBoxers => BoutStatus::MissingBoutPage,
-            BoutStatus::MissingBoutPage => BoutStatus::Checked,
-            BoutStatus::Checked => BoutStatus::Announced,
-            BoutStatus::Announced => panic!("No next status (called on BoutStatus::Announced)"),
+            MissingBoxers => MissingBoutPage,
+            MissingBoutPage => Checked,
+            Checked => Announced,
+            Announced => panic!("No next status (called on {})", self),
         };
-        //println!(" to '{}'", self);
     }
 }
 
@@ -213,7 +213,7 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
     return Ok(());
 
     // Load config
-    // TODO: make this changeable using a flag
+    // TODO: make this changeable using a flag/arg
     let config = Config::new(CONFIG_PATH);
 
     // Connect to BoxRec
@@ -242,13 +242,13 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
         // Tag all bouts with metadata if they don't already have it
         bouts.into_iter()
             .for_each(|bout| {
-                let bout = BoutMetadata(bout, BoutStatus::MissingBoxers);
+                let bout = BoutMetadata(bout, MissingBoxers);
                 if !bout_metadata.contains(&bout) { bout_metadata.push(bout); }
             });
 
         for BoutMetadata(bout, status) in bout_metadata.iter_mut() {
             // Step 1: Get boxers
-            if status == &BoutStatus::MissingBoxers {
+            if status == &MissingBoxers {
                 let mut have_one = true;
                 let mut have_two = true;
 
@@ -274,7 +274,7 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
             }
 
             // Step 2: Get bout between boxers
-            if status == &BoutStatus::MissingBoutPage {
+            if status == &MissingBoutPage {
                 let fighter_one = boxers.get(&bout.fighter_one).unwrap();
                 let fighter_two = boxers.get(&bout.fighter_two).unwrap();
 
