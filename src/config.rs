@@ -14,6 +14,7 @@ pub struct Config {
     pub password: Option<String>,       // password for BoxRec
     request_delay: Option<u64>,         // minimum time between BoxRec requests
     notify_threshold: Option<f32>,      // positive difference in our odds required to get notified
+    warning_threshold: Option<f32>,     // if either boxer's BoxRec score is below this, warn user
     recheck_delay: Option<u16>,         // time in minutes between Betfair checks
 }
 
@@ -51,6 +52,7 @@ impl Config {
             password: None,
             request_delay: Some(500u64),
             notify_threshold: Some(15f32),
+            warning_threshold: Some(2f32),
             recheck_delay: Some(60u16),
         }
     }
@@ -85,6 +87,10 @@ impl Config {
             Some(percent) => percent,
             None => Config::new_default().notify_threshold.unwrap(),
         }
+    }
+
+    pub fn get_warning_threshold(&self) -> f32 {
+        self.warning_threshold.unwrap_or(Config::new_default().warning_threshold.unwrap())
     }
 
     pub fn get_recheck_delay(&self) -> Duration {

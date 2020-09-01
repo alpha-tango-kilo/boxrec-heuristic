@@ -189,7 +189,7 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
                 let fighter_one = boxers.get(&bout.fighter_one).unwrap();
                 let fighter_two = boxers.get(&bout.fighter_two).unwrap();
 
-                let boxrec_odds = match fighter_one.get_bout_scores(&mut boxrec, &fighter_two) {
+                let boxrec_odds = match fighter_one.get_bout_scores(&config, &mut boxrec, &fighter_two) {
                     Ok(m) => m,
                     Err(why) => {
                         eprintln!("Failed to get bout between {} & {} (Error: {})",

@@ -6,9 +6,7 @@ use scraper::Selector;
 use serde::{Deserialize, Serialize};
 
 use crate::boxrec::BoxRecAPI;
-
-// If both boxers in a matchup have a score below this, a warning will be added
-const SCORE_WARNING: f32 = 2f32;
+use crate::config::Config;
 
 pub struct Matchup<'a> {
     pub fighter_one: &'a Boxer,
@@ -19,14 +17,14 @@ pub struct Matchup<'a> {
 }
 
 impl<'a> Matchup<'a> {
-    fn new(fighter_one: &'a Boxer, fighter_one_score: f32, fighter_two: &'a Boxer, fighter_two_score: f32) -> Matchup<'a> {
+    fn new(config: &Config, fighter_one: &'a Boxer, fighter_one_score: f32, fighter_two: &'a Boxer, fighter_two_score: f32) -> Matchup<'a> {
         let win_percent_one = fighter_one_score / (fighter_one_score + fighter_two_score) * 100f32;
         Matchup {
             fighter_one,
             fighter_two,
             win_percent_one,
             win_percent_two: 100f32 - win_percent_one,
-            warning: fighter_one_score + fighter_two_score < 2f32 * SCORE_WARNING,
+            warning: fighter_one_score + fighter_two_score < 2f32 * config.get_warning_threshold(),
         }
     }
 }
@@ -96,7 +94,7 @@ impl Boxer {
 
     pub fn get_name(&self) -> String { format!("{} {}", self.forename, self.surname) }
 
-    pub fn get_bout_scores<'a>(&'a self, api: &mut BoxRecAPI, opponent: &'a Boxer) -> Result<Matchup<'a>, Box<dyn Error>> {
+    pub fn get_bout_scores<'a>(&'a self, config: &Config, api: &mut BoxRecAPI, opponent: &'a Boxer) -> Result<Matchup<'a>, Box<dyn Error>> {
         let bout_page = api.get_bout_page(&self.id, &opponent.get_name())?;
         let table_row_selector = Selector::parse(".responseLessDataTable").unwrap();
         // Floats below 1 are written as .086 (of course they are), hence the * for the first number
@@ -116,6 +114,7 @@ impl Boxer {
                             .ok()
                     });
                 return Ok(Matchup::new(
+                    config,
                     self,
                     scores.next().ok_or("Couldn't find first fighter's score")?,
                     opponent,
