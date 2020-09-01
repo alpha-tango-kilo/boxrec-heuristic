@@ -135,15 +135,14 @@ impl BetfairAPI {
                         Ok(odds) => {
                             match get_bout_names(&er) {
                                 Ok((fighter_one, fighter_two)) => Some(Bout { fighter_one, fighter_two, odds }),
-                                Err(err) => {
-                                    eprintln!("Failed to get names for a bout (Error: {})", err);
+                                Err(why) => {
+                                    eprintln!("Failed to get names for a bout (Error: {})", why);
                                     None
-                                }
+                                },
                             }
-
                         },
-                        Err(err) => {
-                            eprintln!("Failed to get odds for a bout (Error: {})", err);
+                        Err(why) => {
+                            eprintln!("Failed to get odds for a bout (Error: {})", why);
                             None
                         },
                     }

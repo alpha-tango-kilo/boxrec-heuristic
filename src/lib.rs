@@ -47,13 +47,13 @@ impl Config {
                     }
                     config
                 },
-                Err(err) => {
-                    eprintln!("Failed to parse config file, using default (Error: {})", err);
+                Err(why) => {
+                    eprintln!("Failed to parse config file, using default (Error: {})", why);
                     Config::new_default()
                 },
             },
-            Err(err) => {
-                eprintln!("Failed to read config file, using default (Error: {})", err);
+            Err(why) => {
+                eprintln!("Failed to read config file, using default (Error: {})", why);
                 Config::new_default()
             },
         }
@@ -80,10 +80,10 @@ impl Config {
             .write_all(ser.as_bytes())
         {
             Ok(_) => Ok(()),
-            Err(err) => {
-                eprintln!("Failed to save config file (Error: {})", err);
+            Err(why) => {
+                eprintln!("Failed to save config file (Error: {})", why);
                 eprintln!("Here's the config if you wanted it:\n{}", ser);
-                Err(err.into())
+                Err(why.into())
             },
         }
     }
@@ -273,11 +273,11 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
 
                 let boxrec_odds = match fighter_one.get_bout_scores(&mut boxrec, &fighter_two) {
                     Ok(m) => m,
-                    Err(err) => {
+                    Err(why) => {
                         eprintln!("Failed to get bout between {} & {} (Error: {})",
                                   fighter_one.get_name(),
                                   fighter_two.get_name(),
-                                  err);
+                                  why);
                         continue;
                     },
                 };
@@ -306,12 +306,12 @@ async fn read_cache(cache_path: &str, boxers: &mut HashMap<String, Boxer>, bout_
         Ok(md) => if md.is_file() {
             return Err("Cache path points to an existing file".into());
         },
-        Err(e) => match e.kind() {
+        Err(why) => match why.kind() {
             // If the folder doesn't exist yet, try and make it
             ErrorKind::NotFound => fs::create_dir_all(cache_path)?,
             // If there's another error be spooked
-            _ => return Err(e.into()),
-        }
+            _ => return Err(why.into()),
+        },
     };
 
     // Read pre-existing boxers cache if present and in a good format
@@ -319,9 +319,9 @@ async fn read_cache(cache_path: &str, boxers: &mut HashMap<String, Boxer>, bout_
         Ok(serialised) => serde_yaml::from_str::<Vec<Boxer>>(&serialised)?
             .into_iter()
             .for_each(|b| { boxers.insert(b.get_name(), b); }),
-        Err(err) => match err.kind() {
+        Err(why) => match why.kind() {
             ErrorKind::NotFound => {},
-            _ => return Err(err.into()),
+            _ => return Err(why.into()),
         },
     };
     //println!("Read from disk cache into runtime index:\n{:#?}", boxers);
@@ -329,9 +329,9 @@ async fn read_cache(cache_path: &str, boxers: &mut HashMap<String, Boxer>, bout_
     // Read pre-existing bouts cache if present and in a good format
     match fs::read_to_string(format!("{}/bouts.yml", cache_path)) {
         Ok(serialised) => *bout_metadata = serde_yaml::from_str::<Vec<BoutMetadata>>(&serialised)?,
-        Err(err) => match err.kind() {
+        Err(why) => match why.kind() {
             ErrorKind::NotFound => {},
-            _ => return Err(err.into()),
+            _ => return Err(why.into()),
         },
     };
 

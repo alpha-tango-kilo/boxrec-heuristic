@@ -42,8 +42,8 @@ impl Boxer {
     pub fn new_by_name(api: &mut BoxRecAPI, name: &str) -> Option<Boxer> {
         let (forename, surname) = match split_name(&name) {
             Ok(tup) => tup,
-            Err(err) => {
-                eprintln!("{}", err);
+            Err(why) => {
+                eprintln!("{}", why);
                 return None;
             },
         };
@@ -53,8 +53,8 @@ impl Boxer {
                 forename,
                 surname,
             }),
-            Err(err) => {
-                eprintln!("Failed to get boxer \"{}\" (Error: {})", name, err);
+            Err(why) => {
+                eprintln!("Failed to get boxer \"{}\" (Error: {})", name, why);
                 None
             },
         }
@@ -63,8 +63,8 @@ impl Boxer {
     pub fn new_by_id(api: &mut BoxRecAPI, id: u32) -> Option<Boxer> {
         let page = match api.get_boxer_page_by_id(&id) {
             Ok(page) => page,
-            Err(err) => {
-                eprintln!("Unable to find boxer {} (Error: {})", id, err);
+            Err(why) => {
+                eprintln!("Unable to find boxer {} (Error: {})", id, why);
                 return None;
             },
         };

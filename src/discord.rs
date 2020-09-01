@@ -15,8 +15,8 @@ struct Handler {
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
         if msg.content == "`ping`" {
-            if let Err(err) = msg.channel_id.say(&ctx.http, "Pong!").await {
-                println!("Error sending message ({})", err);
+            if let Err(why) = msg.channel_id.say(&ctx.http, "Pong!").await {
+                println!("Error sending message ({})", why);
             }
         } else if msg.content == "`notify`" {
             self.notify_channels.lock().await.push(msg.channel_id);
