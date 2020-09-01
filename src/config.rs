@@ -75,18 +75,13 @@ impl Config {
     }
 
     pub fn get_request_delay(&self) -> Duration {
-        let ms = match self.request_delay {
-            Some(ms) => ms,
-            None => Config::new_default().request_delay.unwrap(),
-        };
-        Duration::from_millis(ms)
+        Duration::from_millis(
+            self.request_delay.unwrap_or(Config::new_default().request_delay.unwrap())
+        )
     }
 
     pub fn get_notify_threshold(&self) -> f32 {
-        match self.notify_threshold {
-            Some(percent) => percent,
-            None => Config::new_default().notify_threshold.unwrap(),
-        }
+        self.notify_threshold.unwrap_or(Config::new_default().warning_threshold.unwrap())
     }
 
     pub fn get_warning_threshold(&self) -> f32 {
@@ -94,10 +89,8 @@ impl Config {
     }
 
     pub fn get_recheck_delay(&self) -> Duration {
-        let mins = match self.recheck_delay {
-            Some(mins) => mins,
-            None => Config::new_default().recheck_delay.unwrap(),
-        };
+        // Variable not needed but kept for readability
+        let mins = self.recheck_delay.unwrap_or(Config::new_default().recheck_delay.unwrap());
         Duration::from_secs((mins * 60) as u64)
     }
 }
