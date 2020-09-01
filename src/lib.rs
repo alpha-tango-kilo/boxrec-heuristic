@@ -103,7 +103,11 @@ impl Config {
     }
 
     fn get_recheck_delay(&self) -> Duration {
-        Duration::from_secs((self.recheck_delay.unwrap() * 60) as u64)
+        let mins = match self.recheck_delay {
+            Some(mins) => mins,
+            None => Config::new_default().recheck_delay.unwrap(),
+        };
+        Duration::from_secs((mins * 60) as u64)
     }
 }
 
