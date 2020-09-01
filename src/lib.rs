@@ -200,8 +200,11 @@ fn pretty_print_notification(winner_to_be: &str, win_percent: &f32, loser_to_be:
 
 pub async fn run() -> Result<(), Box<dyn Error>> {
     // Get the bot going
-    let token = env::var("DISCORD_TOKEN")
-        .expect("Expected token in environment as DISCORD_TOKEN");
+    let token = match env::var("DISCORD_TOKEN") {
+        Ok(t) => t,
+        // TODO: allow user input
+        Err(_) => return Err("Expected token in environment as DISCORD_TOKEN".into()),
+    };
     let bot = Bot::new(&token).await?;
 
     let (res, _) = tokio::join!(bot.start(), bot.notify());
