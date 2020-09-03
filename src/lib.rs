@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use std::collections::HashMap;
-use std::env;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::fs::{self, OpenOptions};
@@ -15,13 +14,11 @@ use boxer::*;
 use crate::betfair::{BetfairAPI, Bout};
 use crate::boxrec::BoxRecAPI;
 use crate::config::{Config, CONFIG_PATH};
-use crate::discord::Bot;
 
 mod betfair;
 mod boxer;
 mod boxrec;
 mod config;
-mod discord;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct BoutMetadata (
@@ -57,10 +54,10 @@ impl BoutStatus {
 impl Display for BoutStatus {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", match self {
-            BoutStatus::MissingBoxers => "Missing boxers",
-            BoutStatus::MissingBoutPage => "Missing bout page",
-            BoutStatus::Checked => "Odds compared between BoxRec & Betfair",
-            BoutStatus::Announced => "User notified of odds differential",
+            MissingBoxers => "Missing boxers",
+            MissingBoutPage => "Missing bout page",
+            Checked => "Odds compared between BoxRec & Betfair",
+            Announced => "User notified of odds differential",
         })
     }
 }
@@ -108,73 +105,68 @@ fn pretty_print_notification(winner_to_be: &str, win_percent: &f32, loser_to_be:
     );
 }
 
-pub async fn run() -> Result<(), Box<dyn Error>> {
-    // Get the bot going
-    let token = match env::var("DISCORD_TOKEN") {
-        Ok(t) => t,
-        // TODO: allow user input
-        Err(_) => return Err("Expected token in environment as DISCORD_TOKEN".into()),
-    };
-    let bot = Bot::new(&token).await?;
+pub struct State {
+    betfair: BetfairAPI,
+    bout_metadata: Vec<BoutMetadata>,
+    boxers: HashMap<String, Boxer>,
+    boxrec: BoxRecAPI,
+    config: Config,
+}
 
-    bot.notify().await;
+impl State {
+    pub fn new() -> Result<Self, Box<dyn Error>> {
+        // Load config
+        // TODO: make this changeable using a flag/arg
+        let config = Config::new(CONFIG_PATH);
 
-    return Ok(());
+        // Connect to BoxRec
+        let mut boxrec = BoxRecAPI::new(&config)?;
+        boxrec.login()?;
 
-    // Load config
-    // TODO: make this changeable using a flag/arg
-    let config = Config::new(CONFIG_PATH);
+        // Connect to Betfair
+        let betfair = BetfairAPI::new()?;
 
-    // Connect to BoxRec
-    let mut boxrec = BoxRecAPI::new(&config)?;
-    boxrec.login()?;
-
-    // Connect to Betfair
-    let betfair = BetfairAPI::new()?;
-
-    // Create Boxer HashMap (runtime cache/index of Boxers by name)
-    let mut boxers: HashMap<String, Boxer> = HashMap::new();
-    let mut bout_metadata: Vec<BoutMetadata> = Vec::new();
-
-    // Load disk cache before running
-    if let Some(cache_path) = &config.cache_path {
-        read_cache(cache_path, &mut boxers, &mut bout_metadata).await?;
+        Ok(State {
+            betfair,
+            bout_metadata: Vec::new(),
+            boxers: HashMap::new(),
+            boxrec,
+            config,
+        })
     }
 
-    // Main running loop
-    // Contents of this is run at program start, then every Config.recheck_delay minutes
-    loop {
+    pub fn task(&mut self) -> Result<(), Box<dyn Error>> {
         // Scrape Betfair
-        let bouts = betfair.get_listed_bouts()?;
+        let bouts = self.betfair.get_listed_bouts()?;
         //println!("{:#?}", bouts);
 
         // Tag all bouts with metadata if they don't already have it
         bouts.into_iter()
             .for_each(|bout| {
                 let bout = BoutMetadata(bout, MissingBoxers);
-                if !bout_metadata.contains(&bout) { bout_metadata.push(bout); }
+                if !self.bout_metadata.contains(&bout) { self.bout_metadata.push(bout); }
             });
 
-        for BoutMetadata(bout, status) in bout_metadata.iter_mut() {
+        for BoutMetadata(bout, status) in self.bout_metadata.iter_mut() {
             // Step 1: Get boxers
             if status == &MissingBoxers {
                 let mut have_one = true;
                 let mut have_two = true;
 
                 // If we don't have fighter one
-                if !boxers.contains_key(&bout.fighter_one) {
+                if !self.boxers.contains_key(&bout.fighter_one) {
                     // Look them up with BoxRec
-                    if let Some(f1) = Boxer::new_by_name(&mut boxrec, &bout.fighter_one) {
+                    if let Some(f1) = Boxer::new_by_name(&mut self.boxrec, &bout.fighter_one) {
                         // Insert them into the index if present
-                        boxers.insert(bout.fighter_one.to_string(), f1);
+                        self.boxers.insert(bout.fighter_one.to_string(), f1);
                     } else {
                         have_one = false;
                     }
                 }
                 // If we don't have fighter two, same process as one
-                if !boxers.contains_key(&bout.fighter_two) {
-                    if let Some(f2) = Boxer::new_by_name(&mut boxrec, &bout.fighter_two) {
-                        boxers.insert(bout.fighter_two.to_string(), f2);
+                if !self.boxers.contains_key(&bout.fighter_two) {
+                    if let Some(f2) = Boxer::new_by_name(&mut self.boxrec, &bout.fighter_two) {
+                        self.boxers.insert(bout.fighter_two.to_string(), f2);
                     } else {
                         have_two = false;
                     }
@@ -184,10 +176,10 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
 
             // Step 2: Get bout between boxers
             if status == &MissingBoutPage {
-                let fighter_one = boxers.get(&bout.fighter_one).unwrap();
-                let fighter_two = boxers.get(&bout.fighter_two).unwrap();
+                let fighter_one = self.boxers.get(&bout.fighter_one).unwrap();
+                let fighter_two = self.boxers.get(&bout.fighter_two).unwrap();
 
-                let boxrec_odds = match fighter_one.get_bout_scores(&config, &mut boxrec, &fighter_two) {
+                let boxrec_odds = match fighter_one.get_bout_scores(&self.config, &mut self.boxrec, &fighter_two) {
                     Ok(m) => m,
                     Err(why) => {
                         eprintln!("Failed to get bout between {} & {} (Error: {})",
@@ -199,83 +191,83 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
                 };
                 status.next();
 
-                compare_and_notify(&boxrec_odds, bout, &config.get_notify_threshold());
+                compare_and_notify(&boxrec_odds, bout, &self.config.get_notify_threshold());
             }
         }
+        Ok(())
+    }
 
-        // Save disk cache after running
-        if let Some(cache_path) = &config.cache_path {
-            write_cache(cache_path, &boxers, &bout_metadata).await?;
+    pub fn read_cache(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(cache_path) = &self.config.cache_path.clone() {
+            // Check for and create cache folder
+            match fs::metadata(cache_path) {
+                // If Ok(), it exists
+                // If it's a file, get scared, otherwise, we have a folder!
+                Ok(md) => if md.is_file() {
+                    return Err("Cache path points to an existing file".into());
+                },
+                Err(why) => match why.kind() {
+                    // If the folder doesn't exist yet, try and make it
+                    ErrorKind::NotFound => fs::create_dir_all(cache_path)?,
+                    // If there's another error be spooked
+                    _ => return Err(why.into()),
+                },
+            };
+
+            // Read pre-existing boxers cache if present and in a good format
+            match fs::read_to_string(format!("{}/boxers.yml", cache_path)) {
+                Ok(serialised) => serde_yaml::from_str::<Vec<Boxer>>(&serialised)?
+                    .into_iter()
+                    .for_each(|b| { self.boxers.insert(b.get_name(), b); }),
+                Err(why) => match why.kind() {
+                    ErrorKind::NotFound => {},
+                    _ => return Err(why.into()),
+                },
+            };
+            //println!("Read from disk cache into runtime index:\n{:#?}", boxers);
+
+            // Read pre-existing bouts cache if present and in a good format
+            match fs::read_to_string(format!("{}/bouts.yml", cache_path)) {
+                Ok(serialised) => self.bout_metadata = serde_yaml::from_str::<Vec<BoutMetadata>>(&serialised)?,
+                Err(why) => match why.kind() {
+                    ErrorKind::NotFound => {},
+                    _ => return Err(why.into()),
+                },
+            };
         }
 
-        // Wait
-        tokio::time::delay_for(config.get_recheck_delay()).await;
+        Ok(())
     }
-    Ok(())
-}
 
-async fn read_cache(cache_path: &str, boxers: &mut HashMap<String, Boxer>, bout_metadata: &mut Vec<BoutMetadata>) -> Result<(), Box<dyn Error>> {
-    // Check for and create cache folder
-    match fs::metadata(cache_path) {
-        // If Ok(), it exists
-        // If it's a file, get scared, otherwise, we have a folder!
-        Ok(md) => if md.is_file() {
-            return Err("Cache path points to an existing file".into());
-        },
-        Err(why) => match why.kind() {
-            // If the folder doesn't exist yet, try and make it
-            ErrorKind::NotFound => fs::create_dir_all(cache_path)?,
-            // If there's another error be spooked
-            _ => return Err(why.into()),
-        },
-    };
+    pub fn write_cache(&self) -> Result<(), Box<dyn Error>> {
+        let cache_path = match &self.config.cache_path {
+            Some(p) => p,
+            None => return Ok(()),
+        };
 
-    // Read pre-existing boxers cache if present and in a good format
-    match fs::read_to_string(format!("{}/boxers.yml", cache_path)) {
-        Ok(serialised) => serde_yaml::from_str::<Vec<Boxer>>(&serialised)?
-            .into_iter()
-            .for_each(|b| { boxers.insert(b.get_name(), b); }),
-        Err(why) => match why.kind() {
-            ErrorKind::NotFound => {},
-            _ => return Err(why.into()),
-        },
-    };
-    //println!("Read from disk cache into runtime index:\n{:#?}", boxers);
+        let mut boxers_file = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(format!("{}/boxers.yml", cache_path))?;
+        boxers_file.write(
+            serde_yaml::to_string(
+                &self.boxers.values()
+                    .collect::<Vec<_>>()
+            )?.as_bytes()
+        )?;
 
-    // Read pre-existing bouts cache if present and in a good format
-    match fs::read_to_string(format!("{}/bouts.yml", cache_path)) {
-        Ok(serialised) => *bout_metadata = serde_yaml::from_str::<Vec<BoutMetadata>>(&serialised)?,
-        Err(why) => match why.kind() {
-            ErrorKind::NotFound => {},
-            _ => return Err(why.into()),
-        },
-    };
+        let mut bouts_file = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(format!("{}/bouts.yml", cache_path))?;
+        bouts_file.write(
+            serde_yaml::to_string(
+                &self.bout_metadata
+            )?.as_bytes()
+        )?;
 
-    Ok(())
-}
-
-async fn write_cache(cache_path: &str, boxers: &HashMap<String, Boxer>, bout_metadata: &Vec<BoutMetadata>) -> Result<(), Box<dyn Error>> {
-    let mut boxers_file = OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(format!("{}/boxers.yml", cache_path))?;
-    boxers_file.write(
-        serde_yaml::to_string(
-            &boxers.values()
-                .collect::<Vec<_>>()
-        )?.as_bytes()
-    )?;
-
-    let mut bouts_file = OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(format!("{}/bouts.yml", cache_path))?;
-    bouts_file.write(
-        serde_yaml::to_string(
-            &bout_metadata
-        )?.as_bytes()
-    )?;
-    Ok(())
+        Ok(())
+    }
 }
