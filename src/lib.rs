@@ -6,7 +6,6 @@ use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
-use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -118,8 +117,7 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
     };
     let bot = Bot::new(&token).await?;
 
-    let (res, _) = tokio::join!(bot.start(), bot.notify());
-    res?;
+    bot.notify().await;
 
     return Ok(());
 
