@@ -1,3 +1,5 @@
+#![feature(async_closure)]
+
 use std::env;
 use std::process::exit;
 

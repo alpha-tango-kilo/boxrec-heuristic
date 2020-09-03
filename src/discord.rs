@@ -1,18 +1,57 @@
-use std::error::Error;
-use std::sync::Arc;
+use std::{
+    error::Error,
+    thread::sleep,
+    time::Duration,
+};
 
 use serenity::{
     async_trait,
+    http::Http,
     model::{channel::Message, gateway::{Activity, Ready}, id::ChannelId, user::OnlineStatus},
     prelude::*,
 };
 
-struct Handler {
-    notify_channels: Arc<Mutex<Vec<ChannelId>>>,
+use boxrec_tool::State;
+
+pub struct Bot {
+    notify_channels: Mutex<Vec<ChannelId>>,
+    task_running: Mutex<bool>,
+    task_state: Mutex<State>,
+}
+
+impl Bot {
+    pub async fn new(token: &str) -> Result<(), Box<dyn Error>> {
+        let mut discord = Client::new(token)
+            .event_handler(Bot {
+                notify_channels: Mutex::new(vec![]),
+                task_running: Mutex::new(false),
+                task_state: Mutex::new(State::new()?)
+            })
+            .await?;
+
+        discord.start().await?;
+
+        Ok(())
+    }
+
+    async fn notify(&self, http: Http) {
+        println!("Waiting!");
+        tokio::time::delay_for(std::time::Duration::from_secs(30)).await;
+        println!("Notifying!");
+        let cs = self.notify_channels.lock().await;
+        println!("{:?}", *cs);
+        for c in cs.iter() {
+            if let Err(why) = c.say(&http, "Foo").await {
+                eprintln!("Failed to send notification to {} (Error: {}", c, why);
+            } else {
+                println!("Notification sent to {}", c);
+            }
+        }
+    }
 }
 
 #[async_trait]
-impl EventHandler for Handler {
+impl EventHandler for Bot {
     async fn message(&self, ctx: Context, msg: Message) {
         if msg.content == "`ping`" {
             if let Err(why) = msg.channel_id.say(&ctx.http, "Pong!").await {
@@ -29,43 +68,24 @@ impl EventHandler for Handler {
         let status = OnlineStatus::Online;
         ctx.set_presence(Some(activity), status).await;
         println!("{} is connected!", ready.user.name);
-    }
-}
 
-pub struct Bot {
-    discord: Client,
-    notify_channels: Arc<Mutex<Vec<ChannelId>>>,
-}
+        sleep(Duration::from_secs(20));
 
-impl Bot {
-    pub async fn new(token: &str) -> Result<Self, Box<dyn Error>> {
-        let notify_channels = Arc::new(Mutex::new(vec![]));
-        let mut discord = Client::new(token)
-            .event_handler(Handler { notify_channels: notify_channels.clone() })
-            .await?;
+        let mut running = *self.task_running.lock().await;
 
-        discord.start().await?;
-
-        Ok(Bot {
-            discord,
-            notify_channels,
-        })
-    }
-
-    pub async fn notify(&self) {
-        println!("Waiting!");
-        tokio::time::delay_for(std::time::Duration::from_secs(30)).await;
-        println!("Notifying!");
-        let cs = self.notify_channels.lock().await;
-        println!("{:?}", *cs);
-        for _c in cs.iter() {
-            /*
-            if let Err(why) = c.say(, "Foo").await {
-                eprintln!("Failed to send notification to {} (Error: {}", c, why);
-            } else {
-                println!("Notification sent to {}", c);
-            }
-            */
+        if !running {
+            running = true;
+            self.task_state.lock().await.read_cache();
+            let http = ctx.http.clone();
+            let task = async move |http| {
+                println!("Test");
+                let _foo = http;
+                /*loop {
+                    self.task_state.lock().await;
+                }*/
+            };
+            let handle = tokio::spawn(task(http));
+            handle.await;
         }
     }
 }
