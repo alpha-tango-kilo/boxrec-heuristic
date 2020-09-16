@@ -5,6 +5,7 @@ use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -269,5 +270,9 @@ impl State {
         )?;
 
         Ok(())
+    }
+
+    pub fn get_recheck_delay(&self) -> Duration {
+        self.config.get_recheck_delay()
     }
 }

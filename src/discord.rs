@@ -1,5 +1,7 @@
 use std::{
     error::Error,
+    process::exit,
+    sync::Arc,
     thread::sleep,
     time::Duration,
 };
@@ -7,25 +9,26 @@ use std::{
 use serenity::{
     async_trait,
     http::Http,
-    model::{channel::Message, gateway::{Activity, Ready}, id::ChannelId, user::OnlineStatus},
+    model::{
+        channel::Message,
+        gateway::{Activity, Ready},
+        id::{ChannelId, GuildId},
+        user::OnlineStatus
+    },
     prelude::*,
 };
 
 use boxrec_tool::State;
 
 pub struct Bot {
-    notify_channels: Mutex<Vec<ChannelId>>,
-    task_running: Mutex<bool>,
-    task_state: Mutex<State>,
+    notify_channels: Arc<Mutex<Vec<ChannelId>>>,
 }
 
 impl Bot {
     pub async fn new(token: &str) -> Result<(), Box<dyn Error>> {
         let mut discord = Client::new(token)
             .event_handler(Bot {
-                notify_channels: Mutex::new(vec![]),
-                task_running: Mutex::new(false),
-                task_state: Mutex::new(State::new()?)
+                notify_channels: Arc::new(Mutex::new(vec![])),
             })
             .await?;
 
@@ -52,6 +55,30 @@ impl Bot {
 
 #[async_trait]
 impl EventHandler for Bot {
+    async fn cache_ready(&self, ctx: Context, _guilds: Vec<GuildId>) {
+        let fut = async move |channels| {
+            if let Err(why) = || -> Result<(), Box<dyn Error>> {
+                let mut state = State::new()?;
+                let _http = ctx.http.clone();
+
+                println!("{:?}", channels);
+
+                state.read_cache()?;
+
+                loop {
+                    state.task()?;
+                    state.write_cache()?;
+                    sleep(state.get_recheck_delay());
+                }
+            }() {
+                eprintln!("Error in task ({})", why);
+                exit(3);
+            }
+        };
+
+        tokio::spawn(fut(self.notify_channels.clone()));
+    }
+
     async fn message(&self, ctx: Context, msg: Message) {
         if msg.content == "`ping`" {
             if let Err(why) = msg.channel_id.say(&ctx.http, "Pong!").await {
@@ -68,24 +95,5 @@ impl EventHandler for Bot {
         let status = OnlineStatus::Online;
         ctx.set_presence(Some(activity), status).await;
         println!("{} is connected!", ready.user.name);
-
-        sleep(Duration::from_secs(20));
-
-        let mut running = *self.task_running.lock().await;
-
-        if !running {
-            running = true;
-            self.task_state.lock().await.read_cache();
-            let http = ctx.http.clone();
-            let task = async move |http| {
-                println!("Test");
-                let _foo = http;
-                /*loop {
-                    self.task_state.lock().await;
-                }*/
-            };
-            let handle = tokio::spawn(task(http));
-            handle.await;
-        }
     }
 }
