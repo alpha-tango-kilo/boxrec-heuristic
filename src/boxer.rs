@@ -27,6 +27,14 @@ impl<'a> Matchup<'a> {
             warning: fighter_one_score + fighter_two_score < 2f32 * config.get_warning_threshold(),
         }
     }
+
+    pub fn get_winner(&self) -> &Boxer {
+        if self.win_percent_one > self.win_percent_two {
+            self.fighter_one
+        } else {
+            self.fighter_two
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
