@@ -1,20 +1,26 @@
 #![allow(dead_code)]
 
-use std::collections::HashMap;
-use std::error::Error;
-use std::fmt::{self, Display, Formatter};
-use std::fs::{self, OpenOptions};
-use std::io::{ErrorKind, Write};
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    error::Error,
+    fmt::{self, Display, Formatter},
+    fs::{self, OpenOptions},
+    io::{ErrorKind, Write},
+    ops::Deref,
+    rc::Rc,
+    time::Duration,
+};
 
 use serde::{Deserialize, Serialize};
 
 use BoutStatus::*;
 use boxer::*;
 
-use crate::betfair::{BetfairAPI, Bout};
-use crate::boxrec::BoxRecAPI;
-use crate::config::{Config, CONFIG_PATH};
+use crate::{
+    betfair::{BetfairAPI, Bout},
+    boxrec::BoxRecAPI,
+    config::{Config, CONFIG_PATH},
+};
 
 mod betfair;
 mod boxer;
@@ -63,53 +69,10 @@ impl Display for BoutStatus {
     }
 }
 
-fn compare_and_notify(matchup: &Matchup, bout: &Bout, threshold: &f32) -> BoutStatus {
-    /*println!("Ours: {}%\tBetfair's:{}%\nOurs: {}%\tBetfair's:{}%",
-             matchup.win_percent_one,
-             bout.odds.one_wins.as_percent(),
-             matchup.win_percent_two,
-             bout.odds.two_wins.as_percent(),
-    );*/
-    if matchup.win_percent_one - bout.odds.one_wins.as_percent() > *threshold {
-        pretty_print_notification(
-            &matchup.fighter_one.get_name(),
-            &matchup.win_percent_one,
-            &matchup.fighter_two.get_name(),
-            &bout.odds.one_wins.as_frac(),
-            &matchup.warning,
-        );
-        BoutStatus::Announced
-    } else if matchup.win_percent_two - bout.odds.two_wins.as_percent() > *threshold {
-        pretty_print_notification(
-            &matchup.fighter_two.get_name(),
-            &matchup.win_percent_two,
-            &matchup.fighter_one.get_name(),
-            &bout.odds.two_wins.as_frac(),
-            &matchup.warning,
-        );
-        BoutStatus::Announced
-    } else {
-        BoutStatus::Checked
-    }
-}
-
-fn pretty_print_notification(winner_to_be: &str, win_percent: &f32, loser_to_be: &str, odds: &str, warning: &bool) {
-    println!("---\n{}\
-    We might be onto something chief!\n\
-    BoxRec shows {} as having a {}% chance of winning against {}, and yet the betting odds are {}\n\
-    ---",
-             if *warning { "[WARNING: both boxer's have a BoxRec score below the safe threshold]\n" } else { "" },
-             winner_to_be,
-             win_percent,
-             loser_to_be,
-             odds
-    );
-}
-
 pub struct State {
     betfair: BetfairAPI,
     bout_metadata: Vec<BoutMetadata>,
-    boxers: HashMap<String, Boxer>,
+    boxers: HashMap<String, Rc<Boxer>>,
     boxrec: BoxRecAPI,
     config: Config,
 }
@@ -136,10 +99,11 @@ impl State {
         })
     }
 
-    pub fn task(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn task(&mut self) -> Result<Vec<Matchup>, Box<dyn Error>> {
         // Scrape Betfair
         let bouts = self.betfair.get_listed_bouts()?;
         //println!("{:#?}", bouts);
+        let mut notifs = vec![];
 
         // Tag all bouts with metadata if they don't already have it
         bouts.into_iter()
@@ -159,7 +123,7 @@ impl State {
                     // Look them up with BoxRec
                     if let Some(f1) = Boxer::new_by_name(&mut self.boxrec, &bout.fighter_one) {
                         // Insert them into the index if present
-                        self.boxers.insert(bout.fighter_one.to_string(), f1);
+                        self.boxers.insert(bout.fighter_one.to_string(), Rc::new(f1));
                     } else {
                         have_one = false;
                     }
@@ -167,7 +131,7 @@ impl State {
                 // If we don't have fighter two, same process as one
                 if !self.boxers.contains_key(&bout.fighter_two) {
                     if let Some(f2) = Boxer::new_by_name(&mut self.boxrec, &bout.fighter_two) {
-                        self.boxers.insert(bout.fighter_two.to_string(), f2);
+                        self.boxers.insert(bout.fighter_two.to_string(), Rc::new(f2));
                     } else {
                         have_two = false;
                     }
@@ -177,10 +141,10 @@ impl State {
 
             // Step 2: Get bout between boxers
             if status == &MissingBoutPage {
-                let fighter_one = self.boxers.get(&bout.fighter_one).unwrap();
-                let fighter_two = self.boxers.get(&bout.fighter_two).unwrap();
+                let fighter_one = self.boxers.get(&bout.fighter_one).unwrap().clone();
+                let fighter_two = self.boxers.get(&bout.fighter_two).unwrap().clone();
 
-                let boxrec_odds = match fighter_one.get_bout_scores(&self.config, &mut self.boxrec, &fighter_two) {
+                let boxrec_odds = match Boxer::get_bout_scores(&self.config, &mut self.boxrec, fighter_one.clone(), fighter_two.clone()) {
                     Ok(m) => m,
                     Err(why) => {
                         eprintln!("Failed to get bout between {} & {} (Error: {})",
@@ -192,10 +156,17 @@ impl State {
                 };
                 status.next();
 
-                compare_and_notify(&boxrec_odds, bout, &self.config.get_notify_threshold());
+                let threshold = self.config.get_notify_threshold();
+
+                if boxrec_odds.win_percent_one - bout.odds.one_wins.as_percent() > threshold ||
+                    boxrec_odds.win_percent_two - bout.odds.two_wins.as_percent() > threshold {
+                    notifs.push(boxrec_odds);
+                    status.next();
+                }
+                status.next();
             }
         }
-        Ok(())
+        Ok(notifs)
     }
 
     pub fn read_cache(&mut self) -> Result<(), Box<dyn Error>> {
@@ -219,7 +190,7 @@ impl State {
             match fs::read_to_string(format!("{}/boxers.yml", cache_path)) {
                 Ok(serialised) => serde_yaml::from_str::<Vec<Boxer>>(&serialised)?
                     .into_iter()
-                    .for_each(|b| { self.boxers.insert(b.get_name(), b); }),
+                    .for_each(|b| { self.boxers.insert(b.get_name(), Rc::new(b)); }),
                 Err(why) => match why.kind() {
                     ErrorKind::NotFound => {},
                     _ => return Err(why.into()),
@@ -254,6 +225,7 @@ impl State {
         boxers_file.write(
             serde_yaml::to_string(
                 &self.boxers.values()
+                    .map(Rc::deref)
                     .collect::<Vec<_>>()
             )?.as_bytes()
         )?;

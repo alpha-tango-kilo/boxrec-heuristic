@@ -1,5 +1,8 @@
-use std::error::Error;
-use std::fmt::{self, Display};
+use std::{
+    error::Error,
+    fmt::{self, Display},
+    rc::Rc,
+};
 
 use regex::Regex;
 use scraper::Selector;
@@ -8,16 +11,16 @@ use serde::{Deserialize, Serialize};
 use crate::boxrec::BoxRecAPI;
 use crate::config::Config;
 
-pub struct Matchup<'a> {
-    pub fighter_one: &'a Boxer,
-    pub fighter_two: &'a Boxer,
+pub struct Matchup {
+    pub fighter_one: Rc<Boxer>,
+    pub fighter_two: Rc<Boxer>,
     pub win_percent_one: f32,
     pub win_percent_two: f32,
     pub warning: bool,
 }
 
-impl<'a> Matchup<'a> {
-    fn new(config: &Config, fighter_one: &'a Boxer, fighter_one_score: f32, fighter_two: &'a Boxer, fighter_two_score: f32) -> Matchup<'a> {
+impl Matchup {
+    fn new(config: &Config, fighter_one: Rc<Boxer>, fighter_one_score: f32, fighter_two: Rc<Boxer>, fighter_two_score: f32) -> Matchup {
         let win_percent_one = fighter_one_score / (fighter_one_score + fighter_two_score) * 100f32;
         Matchup {
             fighter_one,
@@ -28,11 +31,11 @@ impl<'a> Matchup<'a> {
         }
     }
 
-    pub fn get_winner(&self) -> &Boxer {
+    pub fn get_winner(&self) -> Rc<Boxer> {
         if self.win_percent_one > self.win_percent_two {
-            self.fighter_one
+            self.fighter_one.clone()
         } else {
-            self.fighter_two
+            self.fighter_two.clone()
         }
     }
 }
@@ -102,8 +105,8 @@ impl Boxer {
 
     pub fn get_name(&self) -> String { format!("{} {}", self.forename, self.surname) }
 
-    pub fn get_bout_scores<'a>(&'a self, config: &Config, api: &mut BoxRecAPI, opponent: &'a Boxer) -> Result<Matchup<'a>, Box<dyn Error>> {
-        let bout_page = api.get_bout_page(&self.id, &opponent.get_name())?;
+    pub fn get_bout_scores(config: &Config, api: &mut BoxRecAPI, fighter_one: Rc<Boxer>, fighter_two: Rc<Boxer>) -> Result<Matchup, Box<dyn Error>> {
+        let bout_page = api.get_bout_page(&fighter_one.id, &fighter_two.get_name())?;
         let table_row_selector = Selector::parse(".responseLessDataTable").unwrap();
         // Floats below 1 are written as .086 (of course they are), hence the * for the first number
         let float_regex = Regex::new(r"[0-9]*\.[0-9]+").unwrap();
@@ -123,9 +126,9 @@ impl Boxer {
                     });
                 return Ok(Matchup::new(
                     config,
-                    self,
+                    fighter_one,
                     scores.next().ok_or("Couldn't find first fighter's score")?,
-                    opponent,
+                    fighter_two,
                     scores.next().ok_or("Couldn't find second fighter's score")?,
                 ));
             }
