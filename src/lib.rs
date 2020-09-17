@@ -23,7 +23,7 @@ use crate::{
 };
 
 mod betfair;
-mod boxer;
+pub mod boxer;
 mod boxrec;
 mod config;
 

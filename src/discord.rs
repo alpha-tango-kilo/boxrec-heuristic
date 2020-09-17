@@ -3,11 +3,11 @@ use std::{
     process::exit,
     sync::Arc,
     thread::sleep,
-    time::Duration,
 };
 
 use serenity::{
     async_trait,
+    builder::{CreateEmbed, CreateEmbedAuthor},
     http::Http,
     model::{
         channel::Message,
@@ -16,8 +16,10 @@ use serenity::{
         user::OnlineStatus
     },
     prelude::*,
+    utils::Colour,
 };
 
+use boxrec_tool::boxer::Matchup;
 use boxrec_tool::State;
 
 pub struct Bot {
@@ -37,26 +39,36 @@ impl Bot {
         Ok(())
     }
 
-    async fn notify(&self, http: Http) {
-        println!("Waiting!");
-        tokio::time::delay_for(std::time::Duration::from_secs(30)).await;
-        println!("Notifying!");
-        let cs = self.notify_channels.lock().await;
-        println!("{:?}", *cs);
-        for c in cs.iter() {
-            if let Err(why) = c.say(&http, "Foo").await {
-                eprintln!("Failed to send notification to {} (Error: {}", c, why);
-            } else {
-                println!("Notification sent to {}", c);
-            }
+    fn generate_embed(matchup: Matchup) -> CreateEmbed {
+        let mut author = CreateEmbedAuthor::default();
+        author.name("BoxRec Heuristic Tool");
+        author.url("https://github.com/alpha-tango-kilo/boxrec-heuristic");
+        author.icon_url("https://avatars3.githubusercontent.com/u/12728900");
+
+        let mut e = CreateEmbed::default();
+        if matchup.warning {
+            e.colour(Colour::from_rgb(255, 0, 0));
         }
+        e.title(format!("{} vs. {}", matchup.fighter_one, matchup.fighter_two));
+        e.author(author);
+        e.footer("Please gamble responsibly");
+
+        e.field(format!("Our odds ({} wins)", matchup.fighter_one.forename),
+            matchup.win_percent_one,
+            true
+        );
+        e.field(format!("Betfair odds ({} wins)", matchup.fighter_one.forename),
+            matchup.win_percent_one,
+            true
+        );
+        e
     }
 }
 
 #[async_trait]
 impl EventHandler for Bot {
     async fn cache_ready(&self, ctx: Context, _guilds: Vec<GuildId>) {
-        let fut = async move |channels| {
+        let main_task = async move |channels| {
             if let Err(why) = || -> Result<(), Box<dyn Error>> {
                 let mut state = State::new()?;
                 let _http = ctx.http.clone();
@@ -66,7 +78,7 @@ impl EventHandler for Bot {
                 state.read_cache()?;
 
                 loop {
-                    state.task()?;
+                    let _notifs = state.task()?;
                     state.write_cache()?;
                     sleep(state.get_recheck_delay());
                 }
@@ -76,7 +88,7 @@ impl EventHandler for Bot {
             }
         };
 
-        tokio::spawn(fut(self.notify_channels.clone()));
+        tokio::spawn(main_task(self.notify_channels.clone()));
     }
 
     async fn message(&self, ctx: Context, msg: Message) {
