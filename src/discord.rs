@@ -66,27 +66,41 @@ impl Bot {
 #[async_trait]
 impl EventHandler for Bot {
     async fn cache_ready(&self, ctx: Context, _guilds: Vec<GuildId>) {
-        let main_task = async move |channels| {
-            if let Err(why) = || -> Result<(), Box<dyn Error>> {
+        let wrapper_task = async move |channels: Arc<Mutex<Vec<ChannelId>>>| {
+            let main_task = async move || -> Result<(), Box<dyn Error>> {
+                let http = ctx.http.clone();
                 let mut state = State::new()?;
-                let _http = ctx.http.clone();
 
                 println!("{:?}", channels);
 
                 state.read_cache()?;
 
                 loop {
-                    let _notifs = state.task()?;
+                    let notifs = state.task()?;
+                    let channels = channels.lock().await;
+                    for notif in notifs.into_iter()
+                        .map(|n| { Bot::generate_embed(n) })
+                    {
+                        for channel in channels.iter() {
+                            channel.send_message(&http, |m| {
+                                m.embed(|e| {
+                                    e.0 = notif.0.clone();
+                                    e
+                                })
+                            }).await?;
+                        }
+                    }
                     state.write_cache()?;
                     sleep(state.get_recheck_delay());
                 }
-            }() {
+            };
+            if let Err(why) = main_task().await {
                 eprintln!("Error in task ({})", why);
                 exit(3);
             }
         };
 
-        tokio::spawn(main_task(self.notify_channels.clone()));
+        tokio::spawn(wrapper_task(self.notify_channels.clone()));
     }
 
     async fn message(&self, ctx: Context, msg: Message) {
