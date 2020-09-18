@@ -77,6 +77,14 @@ impl Display for Boxer {
     }
 }
 
+impl PartialEq for Boxer {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Eq for Boxer {}
+
 fn split_name(name: &str) -> Result<(String, String), String> {
     // Takes first word as forename and the rest as surname
     match name.find(" ") {
