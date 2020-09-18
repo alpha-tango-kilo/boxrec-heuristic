@@ -8,7 +8,6 @@ use std::{
 use serenity::{
     async_trait,
     builder::CreateEmbed,
-    http::Http,
     model::{
         channel::Message,
         gateway::{Activity, Ready},
@@ -19,7 +18,7 @@ use serenity::{
     utils::Colour,
 };
 
-use boxrec_tool::{Matchup, State};
+use boxrec_tool::{Notification, State};
 
 pub struct Bot {
     notify_channels: Arc<Mutex<Vec<ChannelId>>>,
@@ -38,12 +37,12 @@ impl Bot {
         Ok(())
     }
 
-    fn generate_embed(matchup: Matchup) -> CreateEmbed {
+    fn generate_embed(notif: Notification) -> CreateEmbed {
         let mut e = CreateEmbed::default();
-        if matchup.warning {
+        if notif.warning {
             e.colour(Colour::from_rgb(255, 0, 0));
         }
-        e.title(format!("{} vs. {}", matchup.fighter_one, matchup.fighter_two));
+        e.title(format!("{} vs. {}", notif.winner_to_be, notif.loser_to_be));
         e.author(|a| {
             a.name("BoxRec Heuristic Tool");
             a.url("https://github.com/alpha-tango-kilo/boxrec-heuristic");
@@ -52,13 +51,13 @@ impl Bot {
         });
         e.footer(|f| { f.text("Please gamble responsibly") });
 
-        e.field(format!("Our odds ({} wins)", matchup.fighter_one.forename),
-            matchup.win_percent_one,
-            true
+        e.field(format!("Our odds ({} wins)", notif.winner_to_be.forename),
+                notif.win_percent_ours,
+                true
         );
-        e.field(format!("Betfair odds ({} wins)", matchup.fighter_one.forename),
-            matchup.win_percent_one,
-            true
+        e.field(format!("Betfair odds ({} wins)", notif.winner_to_be.forename),
+                format!("{} ({})", notif.betfair_odds.as_frac(), notif.betfair_odds.as_percent()),
+                true
         );
         e
     }

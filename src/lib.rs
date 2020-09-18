@@ -17,7 +17,7 @@ use BoutStatus::*;
 use boxer::*;
 
 use crate::{
-    betfair::{BetfairAPI, Bout, BoutOdds},
+    betfair::{BetfairAPI, Bout, BoutOdds, Odds},
     boxrec::BoxRecAPI,
     config::{Config, CONFIG_PATH},
 };
@@ -27,17 +27,17 @@ mod boxer;
 mod boxrec;
 mod config;
 
-pub struct Matchup {
-    pub fighter_one: Rc<Boxer>,
-    pub fighter_two: Rc<Boxer>,
-    pub win_percent_one: f32,
-    pub win_percent_two: f32,
-    pub warning: bool,
-    pub betfair_odds: BoutOdds,
+struct Matchup {
+    fighter_one: Rc<Boxer>,
+    fighter_two: Rc<Boxer>,
+    win_percent_one: f32,
+    win_percent_two: f32,
+    warning: bool,
+    betfair_odds: BoutOdds,
 }
 
 impl Matchup {
-    pub fn new(config: &Config, api: &mut BoxRecAPI, betfair_odds: BoutOdds, fighter_one: Rc<Boxer>, fighter_two: Rc<Boxer>) -> Result<Matchup, Box<dyn Error>> {
+    fn new(config: &Config, api: &mut BoxRecAPI, betfair_odds: BoutOdds, fighter_one: Rc<Boxer>, fighter_two: Rc<Boxer>) -> Result<Matchup, Box<dyn Error>> {
         let bout_page = api.get_bout_page(&fighter_one.id, &fighter_two.get_name())?;
         let table_row_selector = Selector::parse(".responseLessDataTable").unwrap();
         // Floats below 1 are written as .086 (of course they are), hence the * for the first number
@@ -74,13 +74,37 @@ impl Matchup {
         Err("Couldn't find scores on bout page".into())
     }
 
-    pub fn get_winner(&self) -> Rc<Boxer> {
-        if self.win_percent_one > self.win_percent_two {
-            self.fighter_one.clone()
-        } else {
-            self.fighter_two.clone()
-        }
+    fn to_notification(self, threshold: f32) -> Option<Notification> {
+        if self.win_percent_one - self.betfair_odds.one_wins.as_percent() > threshold ||
+           self.win_percent_two - self.betfair_odds.two_wins.as_percent() > threshold
+        {
+            if self.win_percent_one > self.win_percent_two {
+                Some(Notification {
+                    winner_to_be: self.fighter_one,
+                    loser_to_be: self.fighter_two,
+                    win_percent_ours: self.win_percent_one,
+                    betfair_odds: self.betfair_odds.one_wins,
+                    warning: self.warning,
+                })
+            } else {
+                Some(Notification {
+                    winner_to_be: self.fighter_two,
+                    loser_to_be: self.fighter_one,
+                    win_percent_ours: self.win_percent_two,
+                    betfair_odds: self.betfair_odds.two_wins,
+                    warning: self.warning,
+                })
+            }
+        } else { None }
     }
+}
+
+pub struct Notification {
+    pub winner_to_be: Rc<Boxer>,
+    pub loser_to_be: Rc<Boxer>,
+    pub win_percent_ours: f32,
+    pub betfair_odds: Odds,
+    pub warning: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -100,7 +124,6 @@ enum BoutStatus {
     MissingBoxers,
     MissingBoutPage,
     Checked,
-    Announced,
 }
 
 impl BoutStatus {
@@ -108,8 +131,7 @@ impl BoutStatus {
         *self = match self {
             MissingBoxers => MissingBoutPage,
             MissingBoutPage => Checked,
-            Checked => Announced,
-            Announced => panic!("No next status (called on {})", self),
+            Checked => panic!("No next status (called on {})", self),
         };
     }
 }
@@ -120,7 +142,6 @@ impl Display for BoutStatus {
             MissingBoxers => "Missing boxers",
             MissingBoutPage => "Missing bout page",
             Checked => "Odds compared between BoxRec & Betfair",
-            Announced => "User notified of odds differential",
         })
     }
 }
@@ -155,11 +176,11 @@ impl State {
         })
     }
 
-    pub fn task(&mut self) -> Result<Vec<Matchup>, Box<dyn Error>> {
+    pub fn task(&mut self) -> Result<Vec<Notification>, Box<dyn Error>> {
         // Scrape Betfair
         let bouts = self.betfair.get_listed_bouts()?;
         //println!("{:#?}", bouts);
-        let mut notifs = vec![];
+        let mut matchups = vec![];
 
         // Tag all bouts with metadata if they don't already have it
         bouts.into_iter()
@@ -211,18 +232,12 @@ impl State {
                     },
                 };
                 status.next();
-
-                let threshold = self.config.get_notify_threshold();
-
-                if boxrec_odds.win_percent_one - boxrec_odds.betfair_odds.one_wins.as_percent() > threshold ||
-                    boxrec_odds.win_percent_two - boxrec_odds.betfair_odds.two_wins.as_percent() > threshold {
-                    notifs.push(boxrec_odds);
-                    status.next();
-                }
-                status.next();
+                matchups.push(boxrec_odds);
             }
         }
-        Ok(notifs)
+        Ok(matchups.into_iter()
+            .filter_map(|m| { m.to_notification(self.config.get_notify_threshold()) })
+            .collect())
     }
 
     pub fn read_cache(&mut self) -> Result<(), Box<dyn Error>> {
