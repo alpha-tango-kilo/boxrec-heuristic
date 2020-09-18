@@ -8,6 +8,7 @@ use std::{
 use serenity::{
     async_trait,
     builder::CreateEmbed,
+    http::Http,
     model::{
         channel::Message,
         gateway::{Activity, Ready},
@@ -66,9 +67,8 @@ impl Bot {
 #[async_trait]
 impl EventHandler for Bot {
     async fn cache_ready(&self, ctx: Context, _guilds: Vec<GuildId>) {
-        let wrapper_task = async move |channels: Arc<Mutex<Vec<ChannelId>>>| {
+        let wrapper_task = async move |http: Arc<Http>, channels: Arc<Mutex<Vec<ChannelId>>>| -> String {
             let main_task = async move || -> Result<(), Box<dyn Error>> {
-                let http = ctx.http.clone();
                 let mut state = State::new()?;
 
                 println!("{:?}", channels);
@@ -95,12 +95,16 @@ impl EventHandler for Bot {
                 }
             };
             if let Err(why) = main_task().await {
-                eprintln!("Error in task ({})", why);
-                exit(3);
-            }
+                why.to_string()
+            } else { String::from("If you see this panic") }
         };
 
-        tokio::spawn(wrapper_task(self.notify_channels.clone()));
+        let exit_reason = tokio::spawn(wrapper_task(ctx.http.clone(), self.notify_channels.clone()));
+        if let Ok(why) = exit_reason.await {
+            eprintln!("Exiting: {}", why);
+        }
+        //ctx.shard.shutdown_clean();
+        exit(3);
     }
 
     async fn message(&self, ctx: Context, msg: Message) {
