@@ -7,7 +7,7 @@ use std::{
 
 use serenity::{
     async_trait,
-    builder::{CreateEmbed, CreateEmbedAuthor},
+    builder::CreateEmbed,
     http::Http,
     model::{
         channel::Message,
@@ -40,18 +40,18 @@ impl Bot {
     }
 
     fn generate_embed(matchup: Matchup) -> CreateEmbed {
-        let mut author = CreateEmbedAuthor::default();
-        author.name("BoxRec Heuristic Tool");
-        author.url("https://github.com/alpha-tango-kilo/boxrec-heuristic");
-        author.icon_url("https://avatars3.githubusercontent.com/u/12728900");
-
         let mut e = CreateEmbed::default();
         if matchup.warning {
             e.colour(Colour::from_rgb(255, 0, 0));
         }
         e.title(format!("{} vs. {}", matchup.fighter_one, matchup.fighter_two));
-        e.author(author);
-        e.footer("Please gamble responsibly");
+        e.author(|a| {
+            a.name("BoxRec Heuristic Tool");
+            a.url("https://github.com/alpha-tango-kilo/boxrec-heuristic");
+            a.icon_url("https://avatars3.githubusercontent.com/u/12728900");
+            a
+        });
+        e.footer(|f| { f.text("Please gamble responsibly") });
 
         e.field(format!("Our odds ({} wins)", matchup.fighter_one.forename),
             matchup.win_percent_one,
