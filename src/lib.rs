@@ -17,7 +17,7 @@ use BoutStatus::*;
 use boxer::*;
 
 use crate::{
-    betfair::{BetfairAPI, Bout},
+    betfair::{BetfairAPI, Bout, BoutOdds},
     boxrec::BoxRecAPI,
     config::{Config, CONFIG_PATH},
 };
@@ -32,12 +32,12 @@ pub struct Matchup {
     pub fighter_two: Rc<Boxer>,
     pub win_percent_one: f32,
     pub win_percent_two: f32,
-    //pub betfair_odds: BoutOdds,
     pub warning: bool,
+    pub betfair_odds: BoutOdds,
 }
 
 impl Matchup {
-    pub fn new(config: &Config, api: &mut BoxRecAPI, fighter_one: Rc<Boxer>, fighter_two: Rc<Boxer>) -> Result<Matchup, Box<dyn Error>> {
+    pub fn new(config: &Config, api: &mut BoxRecAPI, betfair_odds: BoutOdds, fighter_one: Rc<Boxer>, fighter_two: Rc<Boxer>) -> Result<Matchup, Box<dyn Error>> {
         let bout_page = api.get_bout_page(&fighter_one.id, &fighter_two.get_name())?;
         let table_row_selector = Selector::parse(".responseLessDataTable").unwrap();
         // Floats below 1 are written as .086 (of course they are), hence the * for the first number
@@ -67,6 +67,7 @@ impl Matchup {
                     win_percent_one,
                     win_percent_two: 100f32 - win_percent_one,
                     warning: fighter_one_score + fighter_two_score < 2f32 * config.get_warning_threshold(),
+                    betfair_odds,
                 });
             }
         }
@@ -167,26 +168,26 @@ impl State {
                 if !self.bout_metadata.contains(&bout) { self.bout_metadata.push(bout); }
             });
 
-        for BoutMetadata(bout, status) in self.bout_metadata.iter_mut() {
+        for BoutMetadata(betfair_bout, status) in self.bout_metadata.iter_mut() {
             // Step 1: Get boxers
             if status == &MissingBoxers {
                 let mut have_one = true;
                 let mut have_two = true;
 
                 // If we don't have fighter one
-                if !self.boxers.contains_key(&bout.fighter_one) {
+                if !self.boxers.contains_key(&betfair_bout.fighter_one) {
                     // Look them up with BoxRec
-                    if let Some(f1) = Boxer::new_by_name(&mut self.boxrec, &bout.fighter_one) {
+                    if let Some(f1) = Boxer::new_by_name(&mut self.boxrec, &betfair_bout.fighter_one) {
                         // Insert them into the index if present
-                        self.boxers.insert(bout.fighter_one.to_string(), Rc::new(f1));
+                        self.boxers.insert(betfair_bout.fighter_one.to_string(), Rc::new(f1));
                     } else {
                         have_one = false;
                     }
                 }
                 // If we don't have fighter two, same process as one
-                if !self.boxers.contains_key(&bout.fighter_two) {
-                    if let Some(f2) = Boxer::new_by_name(&mut self.boxrec, &bout.fighter_two) {
-                        self.boxers.insert(bout.fighter_two.to_string(), Rc::new(f2));
+                if !self.boxers.contains_key(&betfair_bout.fighter_two) {
+                    if let Some(f2) = Boxer::new_by_name(&mut self.boxrec, &betfair_bout.fighter_two) {
+                        self.boxers.insert(betfair_bout.fighter_two.to_string(), Rc::new(f2));
                     } else {
                         have_two = false;
                     }
@@ -196,10 +197,10 @@ impl State {
 
             // Step 2: Get bout between boxers
             if status == &MissingBoutPage {
-                let fighter_one = self.boxers.get(&bout.fighter_one).unwrap().clone();
-                let fighter_two = self.boxers.get(&bout.fighter_two).unwrap().clone();
+                let fighter_one = self.boxers.get(&betfair_bout.fighter_one).unwrap().clone();
+                let fighter_two = self.boxers.get(&betfair_bout.fighter_two).unwrap().clone();
 
-                let boxrec_odds = match Matchup::new(&self.config, &mut self.boxrec, fighter_one.clone(), fighter_two.clone()) {
+                let boxrec_odds = match Matchup::new(&self.config, &mut self.boxrec, betfair_bout.odds, fighter_one.clone(), fighter_two.clone()) {
                     Ok(m) => m,
                     Err(why) => {
                         eprintln!("Failed to get bout between {} & {} (Error: {})",
@@ -213,8 +214,8 @@ impl State {
 
                 let threshold = self.config.get_notify_threshold();
 
-                if boxrec_odds.win_percent_one - bout.odds.one_wins.as_percent() > threshold ||
-                    boxrec_odds.win_percent_two - bout.odds.two_wins.as_percent() > threshold {
+                if boxrec_odds.win_percent_one - boxrec_odds.betfair_odds.one_wins.as_percent() > threshold ||
+                    boxrec_odds.win_percent_two - boxrec_odds.betfair_odds.two_wins.as_percent() > threshold {
                     notifs.push(boxrec_odds);
                     status.next();
                 }
