@@ -5,7 +5,7 @@ use std::{
     fs::{self, OpenOptions},
     io::{ErrorKind, Write},
     ops::Deref,
-    rc::Rc,
+    sync::Arc,
     time::Duration,
 };
 
@@ -28,8 +28,8 @@ mod boxrec;
 mod config;
 
 struct Matchup {
-    fighter_one: Rc<Boxer>,
-    fighter_two: Rc<Boxer>,
+    fighter_one: Arc<Boxer>,
+    fighter_two: Arc<Boxer>,
     win_percent_one: f32,
     win_percent_two: f32,
     warning: bool,
@@ -37,7 +37,7 @@ struct Matchup {
 }
 
 impl Matchup {
-    fn new(config: &Config, api: &mut BoxRecAPI, betfair_odds: BoutOdds, fighter_one: Rc<Boxer>, fighter_two: Rc<Boxer>) -> Result<Matchup, Box<dyn Error>> {
+    fn new(config: &Config, api: &mut BoxRecAPI, betfair_odds: BoutOdds, fighter_one: Arc<Boxer>, fighter_two: Arc<Boxer>) -> Result<Matchup, Box<dyn Error>> {
         let bout_page = api.get_bout_page(&fighter_one.id, &fighter_two.get_name())?;
         let table_row_selector = Selector::parse(".responseLessDataTable").unwrap();
         // Floats below 1 are written as .086 (of course they are), hence the * for the first number
@@ -100,8 +100,8 @@ impl Matchup {
 }
 
 pub struct Notification {
-    pub winner_to_be: Rc<Boxer>,
-    pub loser_to_be: Rc<Boxer>,
+    pub winner_to_be: Arc<Boxer>,
+    pub loser_to_be: Arc<Boxer>,
     pub win_percent_ours: f32,
     pub betfair_odds: Odds,
     pub warning: bool,
@@ -149,7 +149,7 @@ impl Display for BoutStatus {
 pub struct State {
     betfair: BetfairAPI,
     bout_metadata: Vec<BoutMetadata>,
-    boxers: HashMap<String, Rc<Boxer>>,
+    boxers: HashMap<String, Arc<Boxer>>,
     boxrec: BoxRecAPI,
     config: Config,
 }
@@ -200,7 +200,7 @@ impl State {
                     // Look them up with BoxRec
                     if let Some(f1) = Boxer::new_by_name(&mut self.boxrec, &betfair_bout.fighter_one) {
                         // Insert them into the index if present
-                        self.boxers.insert(betfair_bout.fighter_one.to_string(), Rc::new(f1));
+                        self.boxers.insert(betfair_bout.fighter_one.to_string(), Arc::new(f1));
                     } else {
                         have_one = false;
                     }
@@ -208,7 +208,7 @@ impl State {
                 // If we don't have fighter two, same process as one
                 if !self.boxers.contains_key(&betfair_bout.fighter_two) {
                     if let Some(f2) = Boxer::new_by_name(&mut self.boxrec, &betfair_bout.fighter_two) {
-                        self.boxers.insert(betfair_bout.fighter_two.to_string(), Rc::new(f2));
+                        self.boxers.insert(betfair_bout.fighter_two.to_string(), Arc::new(f2));
                     } else {
                         have_two = false;
                     }
@@ -261,7 +261,7 @@ impl State {
             match fs::read_to_string(format!("{}/boxers.yml", cache_path)) {
                 Ok(serialised) => serde_yaml::from_str::<Vec<Boxer>>(&serialised)?
                     .into_iter()
-                    .for_each(|b| { self.boxers.insert(b.get_name(), Rc::new(b)); }),
+                    .for_each(|b| { self.boxers.insert(b.get_name(), Arc::new(b)); }),
                 Err(why) => match why.kind() {
                     ErrorKind::NotFound => {},
                     _ => return Err(why.into()),
@@ -296,7 +296,7 @@ impl State {
         boxers_file.write(
             serde_yaml::to_string(
                 &self.boxers.values()
-                    .map(Rc::deref)
+                    .map(Arc::deref)
                     .collect::<Vec<_>>()
             )?.as_bytes()
         )?;
