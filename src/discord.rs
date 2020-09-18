@@ -19,8 +19,7 @@ use serenity::{
     utils::Colour,
 };
 
-use boxrec_tool::boxer::Matchup;
-use boxrec_tool::State;
+use boxrec_tool::{Matchup, State};
 
 pub struct Bot {
     notify_channels: Arc<Mutex<Vec<ChannelId>>>,

@@ -1,44 +1,9 @@
-use std::{
-    error::Error,
-    fmt::{self, Display},
-    rc::Rc,
-};
+use std::fmt::{self, Display};
 
-use regex::Regex;
 use scraper::Selector;
 use serde::{Deserialize, Serialize};
 
 use crate::boxrec::BoxRecAPI;
-use crate::config::Config;
-
-pub struct Matchup {
-    pub fighter_one: Rc<Boxer>,
-    pub fighter_two: Rc<Boxer>,
-    pub win_percent_one: f32,
-    pub win_percent_two: f32,
-    pub warning: bool,
-}
-
-impl Matchup {
-    fn new(config: &Config, fighter_one: Rc<Boxer>, fighter_one_score: f32, fighter_two: Rc<Boxer>, fighter_two_score: f32) -> Matchup {
-        let win_percent_one = fighter_one_score / (fighter_one_score + fighter_two_score) * 100f32;
-        Matchup {
-            fighter_one,
-            fighter_two,
-            win_percent_one,
-            win_percent_two: 100f32 - win_percent_one,
-            warning: fighter_one_score + fighter_two_score < 2f32 * config.get_warning_threshold(),
-        }
-    }
-
-    pub fn get_winner(&self) -> Rc<Boxer> {
-        if self.win_percent_one > self.win_percent_two {
-            self.fighter_one.clone()
-        } else {
-            self.fighter_two.clone()
-        }
-    }
-}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Boxer {
@@ -104,37 +69,6 @@ impl Boxer {
     }
 
     pub fn get_name(&self) -> String { format!("{} {}", self.forename, self.surname) }
-
-    pub fn get_bout_scores(config: &Config, api: &mut BoxRecAPI, fighter_one: Rc<Boxer>, fighter_two: Rc<Boxer>) -> Result<Matchup, Box<dyn Error>> {
-        let bout_page = api.get_bout_page(&fighter_one.id, &fighter_two.get_name())?;
-        let table_row_selector = Selector::parse(".responseLessDataTable").unwrap();
-        // Floats below 1 are written as .086 (of course they are), hence the * for the first number
-        let float_regex = Regex::new(r"[0-9]*\.[0-9]+").unwrap();
-
-        for row in bout_page.select(&table_row_selector) {
-            let raw_html = row.html();
-            if raw_html.contains("after fight") {
-                let mut scores = float_regex.find_iter(&raw_html)
-                    .filter_map(|m| -> Option<f32> {
-                        // Take the snip identified by the regex
-                        // Always add a zero to the start, just in case
-                        format!("0{}", &raw_html[m.start()..m.end()])
-                            // Parse it as a float
-                            .parse::<f32>()
-                            // And convert it to an option so the filter_map drops all the bad ones
-                            .ok()
-                    });
-                return Ok(Matchup::new(
-                    config,
-                    fighter_one,
-                    scores.next().ok_or("Couldn't find first fighter's score")?,
-                    fighter_two,
-                    scores.next().ok_or("Couldn't find second fighter's score")?,
-                ));
-            }
-        }
-        Err("Couldn't find scores on bout page".into())
-    }
 }
 
 impl Display for Boxer {

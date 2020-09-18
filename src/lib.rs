@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::{
     collections::HashMap,
     error::Error,
@@ -11,6 +9,8 @@ use std::{
     time::Duration,
 };
 
+use regex::Regex;
+use scraper::Selector;
 use serde::{Deserialize, Serialize};
 
 use BoutStatus::*;
@@ -23,13 +23,68 @@ use crate::{
 };
 
 mod betfair;
-pub mod boxer;
+mod boxer;
 mod boxrec;
 mod config;
 
+pub struct Matchup {
+    pub fighter_one: Rc<Boxer>,
+    pub fighter_two: Rc<Boxer>,
+    pub win_percent_one: f32,
+    pub win_percent_two: f32,
+    //pub betfair_odds: BoutOdds,
+    pub warning: bool,
+}
+
+impl Matchup {
+    pub fn new(config: &Config, api: &mut BoxRecAPI, fighter_one: Rc<Boxer>, fighter_two: Rc<Boxer>) -> Result<Matchup, Box<dyn Error>> {
+        let bout_page = api.get_bout_page(&fighter_one.id, &fighter_two.get_name())?;
+        let table_row_selector = Selector::parse(".responseLessDataTable").unwrap();
+        // Floats below 1 are written as .086 (of course they are), hence the * for the first number
+        let float_regex = Regex::new(r"[0-9]*\.[0-9]+").unwrap();
+
+        for row in bout_page.select(&table_row_selector) {
+            let raw_html = row.html();
+            if raw_html.contains("after fight") {
+                let mut scores = float_regex.find_iter(&raw_html)
+                    .filter_map(|m| -> Option<f32> {
+                        // Take the snip identified by the regex
+                        // Always add a zero to the start, just in case
+                        format!("0{}", &raw_html[m.start()..m.end()])
+                            // Parse it as a float
+                            .parse::<f32>()
+                            // And convert it to an option so the filter_map drops all the bad ones
+                            .ok()
+                    });
+
+                let fighter_one_score = scores.next().ok_or("Couldn't find first fighter's score")?;
+                let fighter_two_score = scores.next().ok_or("Couldn't find second fighter's score")?;
+                let win_percent_one = fighter_one_score / (fighter_one_score + fighter_two_score) * 100f32;
+
+                return Ok(Matchup {
+                    fighter_one,
+                    fighter_two,
+                    win_percent_one,
+                    win_percent_two: 100f32 - win_percent_one,
+                    warning: fighter_one_score + fighter_two_score < 2f32 * config.get_warning_threshold(),
+                });
+            }
+        }
+        Err("Couldn't find scores on bout page".into())
+    }
+
+    pub fn get_winner(&self) -> Rc<Boxer> {
+        if self.win_percent_one > self.win_percent_two {
+            self.fighter_one.clone()
+        } else {
+            self.fighter_two.clone()
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 struct BoutMetadata (
-    Bout, // TODO: Maybe take a reference so memory usage isn't as ass?
+    Bout,
     BoutStatus,
 );
 
@@ -144,7 +199,7 @@ impl State {
                 let fighter_one = self.boxers.get(&bout.fighter_one).unwrap().clone();
                 let fighter_two = self.boxers.get(&bout.fighter_two).unwrap().clone();
 
-                let boxrec_odds = match Boxer::get_bout_scores(&self.config, &mut self.boxrec, fighter_one.clone(), fighter_two.clone()) {
+                let boxrec_odds = match Matchup::new(&self.config, &mut self.boxrec, fighter_one.clone(), fighter_two.clone()) {
                     Ok(m) => m,
                     Err(why) => {
                         eprintln!("Failed to get bout between {} & {} (Error: {})",
